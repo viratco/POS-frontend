@@ -12,6 +12,7 @@ type Ticket = {
   qty: number;
   note: string | null;
   created_at: string;
+  accepted_at: string | null;
   orders: { tables: { name: string } | null } | null;
 };
 
@@ -24,9 +25,10 @@ export default function KitchenScreen() {
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("order_items")
-      .select("id, name_snapshot, qty, note, created_at, orders!inner(status, tables(name))")
+      .select("id, name_snapshot, qty, note, created_at, accepted_at, orders!inner(status, tables(name))")
       .eq("status", "pending")
       .eq("orders.status", "open")
+      .order("accepted_at", { ascending: true, nullsFirst: true })
       .order("created_at");
     if (error) setError(error.message);
     else {
@@ -73,7 +75,7 @@ export default function KitchenScreen() {
       ) : (
         <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {tickets.map((t) => {
-            const mins = now === 0 ? 0 : Math.max(0, Math.floor((now - new Date(t.created_at).getTime()) / 60_000));
+            const mins = now === 0 ? 0 : Math.max(0, Math.floor((now - new Date(t.accepted_at ?? t.created_at).getTime()) / 60_000));
             const late = mins >= 15;
             return (
               <li key={t.id}>

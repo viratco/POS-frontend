@@ -17,7 +17,8 @@ export function gstPaise(subtotalPaise: number, rateBps = GST_RATE_BPS): number 
 
 export function billFor(lines: { price_paise_snapshot: number; qty: number; status: string }[]) {
   const subtotal = lines
-    .filter((l) => l.status !== "void")
+    // Only what was sent to the kitchen is billed; "new" is still awaiting staff acceptance.
+    .filter((l) => l.status !== "void" && l.status !== "new")
     .reduce((sum, l) => sum + l.price_paise_snapshot * l.qty, 0);
   const gst = gstPaise(subtotal);
   return { subtotal, gst, total: subtotal + gst, rateBps: GST_RATE_BPS };

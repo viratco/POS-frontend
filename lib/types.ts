@@ -20,7 +20,7 @@ export type MenuItem = {
 export type Diet = "veg" | "egg" | "nonveg";
 export type Mood = "meal" | "share" | "drink";
 export type OrderStatus = "open" | "paid" | "cancelled";
-export type OrderItemStatus = "pending" | "ready" | "served" | "void";
+export type OrderItemStatus = "new" | "pending" | "ready" | "served" | "void";
 export type Order = {
   id: string;
   table_id: string;
@@ -40,6 +40,7 @@ export type OrderItem = {
   status: OrderItemStatus;
   source: "customer" | "staff";
   created_at: string;
+  accepted_at: string | null;
   ready_at: string | null;
 };
 export type CartLine = { menu_item_id: string; qty: number; note: string | null };

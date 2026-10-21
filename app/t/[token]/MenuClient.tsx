@@ -653,9 +653,10 @@ function Confirmation({ tableName, placed, onAgain }: { tableName: string; place
               <path d="M5 12.5l4.5 4.5L19 7.5" />
             </svg>
           </div>
-          <h1 className="mt-6 text-2xl font-bold">Order placed!</h1>
+          <h1 className="mt-6 text-2xl font-bold">Order received!</h1>
           <p className={`mt-2 ${GREY}`}>
-            The kitchen has your order for <span className="font-semibold text-[#2d3748]">{tableName}</span>.
+            Our staff will confirm your order for <span className="font-semibold text-[#2d3748]">{tableName}</span> and send it to the
+            kitchen right away.
           </p>
         </div>
 

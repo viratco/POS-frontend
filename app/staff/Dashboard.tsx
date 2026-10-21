@@ -8,17 +8,19 @@ import { billFor, formatINR, GST_RATE_BPS } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Category, MenuItem, Order, OrderItem, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
-import { staffAddItems } from "./actions";
+import { acceptOrder, staffAddItems } from "./actions";
 
-type TableState = "empty" | "open" | "ready_to_pay";
+type TableState = "empty" | "new_order" | "open" | "ready_to_pay";
 
 const STATE_STYLE: Record<TableState, { label: string; card: string; badge: string }> = {
   empty: { label: "Empty", card: "border-stone-200 bg-white", badge: "bg-stone-100 text-stone-600" },
+  new_order: { label: "New order", card: "border-rose-400 bg-rose-50", badge: "bg-rose-500 text-white" },
   open: { label: "Open", card: "border-amber-300 bg-amber-50", badge: "bg-amber-200 text-amber-900" },
   ready_to_pay: { label: "Ready to pay", card: "border-emerald-400 bg-emerald-50", badge: "bg-emerald-200 text-emerald-900" },
 };
 
 const ITEM_STYLE: Record<OrderItem["status"], string> = {
+  new: "bg-rose-100 text-rose-800",
   pending: "bg-amber-100 text-amber-900",
   ready: "bg-sky-100 text-sky-900",
   served: "bg-emerald-100 text-emerald-900",
@@ -85,7 +87,17 @@ export default function Dashboard() {
     const order = openByTable.get(tableId);
     if (!order) return "empty";
     const live = (itemsByOrder.get(order.id) ?? []).filter((i) => i.status !== "void");
-    return live.length > 0 && live.every((i) => i.status !== "pending") ? "ready_to_pay" : "open";
+    if (live.some((i) => i.status === "new")) return "new_order";
+    return live.length > 0 && live.every((i) => i.status === "ready" || i.status === "served") ? "ready_to_pay" : "open";
+  }
+
+  const [accepting, setAccepting] = useState<string | null>(null);
+  async function accept(orderId: string) {
+    setAccepting(orderId);
+    const res = await acceptOrder(orderId);
+    setAccepting(null);
+    if (!res.ok) setError(res.error);
+    void load();
   }
 
   const selected = tables.find((t) => t.id === selectedId) ?? null;
@@ -106,10 +118,13 @@ export default function Dashboard() {
             const live = orderItems.filter((i) => i.status !== "void");
             const s = STATE_STYLE[stateOf(t.id)];
             return (
-              <button
+              <div
                 key={t.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedId(t.id)}
-                className={`rounded-xl border-2 p-4 text-left transition ${s.card} ${selectedId === t.id ? "ring-2 ring-stone-900" : ""} ${order && flash.has(order.id) ? "animate-pulse" : ""}`}
+                onKeyDown={(e) => e.key === "Enter" && setSelectedId(t.id)}
+                className={`cursor-pointer rounded-xl border-2 p-4 text-left transition ${s.card} ${selectedId === t.id ? "ring-2 ring-stone-900" : ""} ${order && flash.has(order.id) ? "animate-pulse" : ""}`}
               >
                 <div className="flex items-start justify-between">
                   <span className="text-lg font-semibold">{t.name}</span>
@@ -123,7 +138,21 @@ export default function Dashboard() {
                 ) : (
                   <div className="mt-3 text-sm text-stone-400">—</div>
                 )}
-              </button>
+                {order && stateOf(t.id) === "new_order" && (
+                  <button
+                    disabled={accepting === order.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void accept(order.id);
+                    }}
+                    className="mt-3 w-full rounded-lg bg-rose-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {accepting === order.id
+                      ? "Sending…"
+                      : `Accept & send to kitchen (${orderItems.filter((i) => i.status === "new").reduce((n, i) => n + i.qty, 0)})`}
+                  </button>
+                )}
+              </div>
             );
           })}
         </section>
@@ -136,6 +165,8 @@ export default function Dashboard() {
             items={(openByTable.get(selected.id) && itemsByOrder.get(openByTable.get(selected.id)!.id)) || []}
             onClose={() => setSelectedId(null)}
             onChanged={load}
+            onAccept={accept}
+            accepting={accepting === openByTable.get(selected.id)?.id}
           />
         )}
       </div>
@@ -149,12 +180,16 @@ function OrderPanel({
   items,
   onClose,
   onChanged,
+  onAccept,
+  accepting,
 }: {
   table: Table;
   order: Order | null;
   items: OrderItem[];
   onClose: () => void;
   onChanged: () => void;
+  onAccept: (orderId: string) => Promise<void>;
+  accepting: boolean;
 }) {
   const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
@@ -162,6 +197,7 @@ function OrderPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bill = billFor(items);
+  const waiting = items.filter((i) => i.status === "new");
 
   async function run(fn: () => PromiseLike<{ error: { message: string } | null }>) {
     setBusy(true);
@@ -207,6 +243,34 @@ function OrderPanel({
         <p className="text-xs text-stone-500">Opened {new Date(order.created_at).toLocaleTimeString("en-IN", { timeStyle: "short" })}</p>
       )}
 
+      {order && waiting.length > 0 && (
+        <div className="mt-4 rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
+          <p className="font-semibold text-rose-900">
+            New order · {waiting.reduce((n, i) => n + i.qty, 0)} item{waiting.length > 1 || waiting[0].qty > 1 ? "s" : ""} waiting
+          </p>
+          <p className="text-sm text-rose-800">Check the guests are seated, then send it to the kitchen.</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              disabled={accepting || busy}
+              onClick={() => onAccept(order.id)}
+              className="flex-1 rounded-lg bg-rose-600 py-2.5 font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+            >
+              {accepting ? "Sending…" : "Accept & send to kitchen"}
+            </button>
+            <button
+              disabled={accepting || busy}
+              onClick={() =>
+                confirm(`Reject ${waiting.length} waiting item(s) for ${table.name}?`) &&
+                run(() => supabase.from("order_items").update({ status: "void" }).in("id", waiting.map((i) => i.id)))
+              }
+              className="rounded-lg border border-rose-300 px-4 py-2.5 font-medium text-rose-700 hover:bg-rose-100"
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
+
       {items.length === 0 ? (
         <p className="mt-6 text-stone-500">No items yet.</p>
       ) : (
@@ -220,7 +284,7 @@ function OrderPanel({
                   </div>
                   {i.note && <div className="text-sm text-stone-500">“{i.note}”</div>}
                   <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className={`rounded-full px-2 py-0.5 ${ITEM_STYLE[i.status]}`}>{i.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 ${ITEM_STYLE[i.status]}`}>{i.status === "new" ? "waiting for accept" : i.status}</span>
                     {i.source === "staff" && <span className="text-stone-400">added by staff</span>}
                   </div>
                 </div>
@@ -228,7 +292,7 @@ function OrderPanel({
                   <div className="tabular-nums">{formatINR(i.price_paise_snapshot * i.qty)}</div>
                   {i.status !== "void" && (
                     <div className="mt-1 flex justify-end gap-2 text-xs">
-                      {i.status !== "served" && (
+                      {i.status !== "served" && i.status !== "new" && (
                         <button disabled={busy} onClick={() => setItemStatus(i.id, "served")} className="text-emerald-700 hover:underline">
                           Served
                         </button>

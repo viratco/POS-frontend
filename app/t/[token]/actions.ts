@@ -1,6 +1,5 @@
 "use server";
 
-import { notifyNewItemsAfterResponse } from "@/lib/notify";
 import { supabaseAnon } from "@/lib/supabase/server";
 import type { CartLine } from "@/lib/types";
 
@@ -22,11 +21,7 @@ export async function placeOrder(token: string, lines: CartLine[]): Promise<Plac
     return { ok: false, error: MESSAGES[error.message] ?? "Couldn't send your order. Please try again." };
   }
 
+  // The chef is alerted when staff accept the order (see staff/actions.ts).
   const result = data as { table_name: string; items: PlacedItem[] };
-  notifyNewItemsAfterResponse({
-    tableName: result.table_name,
-    source: "customer",
-    items: result.items.map((i) => ({ name: i.name_snapshot, qty: i.qty, note: i.note })),
-  });
   return { ok: true, tableName: result.table_name, items: result.items };
 }
