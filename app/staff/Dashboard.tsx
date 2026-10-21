@@ -19,6 +19,19 @@ const STATE_STYLE: Record<TableState, { label: string; card: string; badge: stri
   ready_to_pay: { label: "Ready to pay", card: "border-emerald-400 bg-emerald-50", badge: "bg-emerald-200 text-emerald-900" },
 };
 
+const STATUS_LABEL: Record<OrderItem["status"], string> = {
+  new: "Waiting for OK",
+  pending: "In kitchen",
+  ready: "Ready to serve",
+  served: "Served",
+  void: "Removed",
+};
+
+function minsAgo(iso: string, now: number) {
+  const m = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
+  return m === 0 ? "just now" : `${m} min ago`;
+}
+
 const ITEM_STYLE: Record<OrderItem["status"], string> = {
   new: "bg-rose-100 text-rose-800",
   pending: "bg-amber-100 text-amber-900",
@@ -91,6 +104,31 @@ export default function Dashboard() {
     return live.length > 0 && live.every((i) => i.status === "ready" || i.status === "served") ? "ready_to_pay" : "open";
   }
 
+  const [now, setNow] = useState(0);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Every table with QR items waiting for staff OK, oldest first.
+  const waitingOrders = orders
+    .map((o) => ({
+      order: o,
+      table: tables.find((t) => t.id === o.table_id),
+      items: (itemsByOrder.get(o.id) ?? []).filter((i) => i.status === "new"),
+    }))
+    .filter((w) => w.table && w.items.length > 0)
+    .sort((a, b) => a.items[0].created_at.localeCompare(b.items[0].created_at));
+
+  async function reject(tableName: string, waiting: OrderItem[]) {
+    if (!confirm(`Reject the new order for ${tableName}? It won't be made or billed.`)) return;
+    const { error } = await supabase.from("order_items").update({ status: "void" }).in("id", waiting.map((i) => i.id));
+    if (error) setError(error.message);
+    void load();
+  }
+
   const [accepting, setAccepting] = useState<string | null>(null);
   async function accept(orderId: string) {
     setAccepting(orderId);
@@ -109,6 +147,52 @@ export default function Dashboard() {
         <SoundToggle />
       </StaffNav>
       {error && <p className="m-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+
+      {waitingOrders.length > 0 && (
+        <section className="border-b-2 border-rose-200 bg-rose-50 px-4 py-4">
+          <h2 className="flex items-center gap-2.5 text-lg font-bold text-rose-900">
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600" />
+            </span>
+            {waitingOrders.length} new order{waitingOrders.length > 1 ? "s" : ""} · check the table, then accept
+          </h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {waitingOrders.map(({ order, table, items: waiting }) => (
+              <div key={order.id} className="flex flex-col rounded-xl border-2 border-rose-300 bg-white p-4 shadow-sm">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xl font-bold">{table!.name}</span>
+                  <span className="text-sm text-stone-500">{now ? minsAgo(waiting[0].created_at, now) : ""}</span>
+                </div>
+                <ul className="mt-2 flex-1 space-y-1">
+                  {waiting.map((i) => (
+                    <li key={i.id} className="text-[15px]">
+                      <span className="font-semibold">{i.qty} ×</span> {i.name_snapshot}
+                      {i.note && <span className="block pl-6 text-sm text-amber-700">“{i.note}”</span>}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    disabled={accepting === order.id}
+                    onClick={() => accept(order.id)}
+                    className="flex-1 rounded-lg bg-emerald-600 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {accepting === order.id ? "Sending…" : "✓ Accept & send to kitchen"}
+                  </button>
+                  <button
+                    disabled={accepting === order.id}
+                    onClick={() => reject(table!.name, waiting)}
+                    className="rounded-lg border-2 border-stone-200 px-4 py-3 font-semibold text-stone-600 hover:bg-stone-50"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="flex flex-1 flex-col lg:flex-row">
         <section className="grid flex-1 grid-cols-2 content-start gap-3 p-4 sm:grid-cols-3 xl:grid-cols-4">
@@ -138,19 +222,8 @@ export default function Dashboard() {
                 ) : (
                   <div className="mt-3 text-sm text-stone-400">—</div>
                 )}
-                {order && stateOf(t.id) === "new_order" && (
-                  <button
-                    disabled={accepting === order.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void accept(order.id);
-                    }}
-                    className="mt-3 w-full rounded-lg bg-rose-600 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-rose-700 active:scale-[0.98] disabled:opacity-60"
-                  >
-                    {accepting === order.id
-                      ? "Sending…"
-                      : `Accept & send to kitchen (${orderItems.filter((i) => i.status === "new").reduce((n, i) => n + i.qty, 0)})`}
-                  </button>
+                {stateOf(t.id) === "new_order" && (
+                  <div className="mt-2 text-sm font-semibold text-rose-700">Needs your OK ↑</div>
                 )}
               </div>
             );
@@ -198,6 +271,7 @@ function OrderPanel({
   const [error, setError] = useState<string | null>(null);
   const bill = billFor(items);
   const waiting = items.filter((i) => i.status === "new");
+  const sent = items.filter((i) => i.status !== "new");
 
   async function run(fn: () => PromiseLike<{ error: { message: string } | null }>) {
     setBusy(true);
@@ -245,17 +319,25 @@ function OrderPanel({
 
       {order && waiting.length > 0 && (
         <div className="mt-4 rounded-xl border-2 border-rose-300 bg-rose-50 p-4">
-          <p className="font-semibold text-rose-900">
-            New order · {waiting.reduce((n, i) => n + i.qty, 0)} item{waiting.length > 1 || waiting[0].qty > 1 ? "s" : ""} waiting
-          </p>
-          <p className="text-sm text-rose-800">Check the guests are seated, then send it to the kitchen.</p>
-          <div className="mt-3 flex gap-2">
+          <p className="font-bold text-rose-900">New order · waiting for your OK</p>
+          <ul className="mt-2 space-y-1.5">
+            {waiting.map((i) => (
+              <li key={i.id} className="flex justify-between gap-3 text-[15px]">
+                <span>
+                  <span className="font-semibold">{i.qty} ×</span> {i.name_snapshot}
+                  {i.note && <span className="block pl-6 text-sm text-amber-700">“{i.note}”</span>}
+                </span>
+                <span className="tabular-nums text-stone-600">{formatINR(i.price_paise_snapshot * i.qty)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 flex gap-2">
             <button
               disabled={accepting || busy}
               onClick={() => onAccept(order.id)}
-              className="flex-1 rounded-lg bg-rose-600 py-2.5 font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              className="flex-1 rounded-lg bg-emerald-600 py-3 font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
             >
-              {accepting ? "Sending…" : "Accept & send to kitchen"}
+              {accepting ? "Sending…" : "✓ Accept & send to kitchen"}
             </button>
             <button
               disabled={accepting || busy}
@@ -263,7 +345,7 @@ function OrderPanel({
                 confirm(`Reject ${waiting.length} waiting item(s) for ${table.name}?`) &&
                 run(() => supabase.from("order_items").update({ status: "void" }).in("id", waiting.map((i) => i.id)))
               }
-              className="rounded-lg border border-rose-300 px-4 py-2.5 font-medium text-rose-700 hover:bg-rose-100"
+              className="rounded-lg border-2 border-stone-200 bg-white px-4 py-3 font-semibold text-stone-600 hover:bg-stone-50"
             >
               Reject
             </button>
@@ -271,11 +353,13 @@ function OrderPanel({
         </div>
       )}
 
-      {items.length === 0 ? (
-        <p className="mt-6 text-stone-500">No items yet.</p>
+      {sent.length === 0 ? (
+        waiting.length === 0 && <p className="mt-6 text-stone-500">No items yet.</p>
       ) : (
-        <ul className="mt-4 divide-y divide-stone-100">
-          {items.map((i) => (
+        <>
+        <h3 className="mt-5 text-xs font-semibold tracking-wider text-stone-500 uppercase">Sent to kitchen</h3>
+        <ul className="mt-1 divide-y divide-stone-100">
+          {sent.map((i) => (
             <li key={i.id} className="py-2.5">
               <div className="flex items-start justify-between gap-3">
                 <div className={i.status === "void" ? "text-stone-400 line-through" : ""}>
@@ -284,7 +368,7 @@ function OrderPanel({
                   </div>
                   {i.note && <div className="text-sm text-stone-500">“{i.note}”</div>}
                   <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className={`rounded-full px-2 py-0.5 ${ITEM_STYLE[i.status]}`}>{i.status === "new" ? "waiting for accept" : i.status}</span>
+                    <span className={`rounded-full px-2 py-0.5 ${ITEM_STYLE[i.status]}`}>{STATUS_LABEL[i.status]}</span>
                     {i.source === "staff" && <span className="text-stone-400">added by staff</span>}
                   </div>
                 </div>
@@ -311,6 +395,7 @@ function OrderPanel({
             </li>
           ))}
         </ul>
+        </>
       )}
 
       {order && (
