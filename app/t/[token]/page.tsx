@@ -1,0 +1,71 @@
+import type { Viewport } from "next";
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import { supabaseAnon } from "@/lib/supabase/server";
+import type { Category, MenuItem } from "@/lib/types";
+import MenuClient from "./MenuClient";
+
+export const viewport: Viewport = { themeColor: "#ffffff" };
+
+export default function TablePage({ params }: PageProps<"/t/[token]">) {
+  return (
+    <Suspense fallback={<MenuSkeleton />}>
+      <TableMenu params={params} />
+    </Suspense>
+  );
+}
+
+async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const supabase = supabaseAnon();
+
+  const [{ data: table }, { data: categories }, { data: items }] = await Promise.all([
+    supabase.rpc("get_table_by_token", { p_qr_token: token }).maybeSingle<{ id: string; name: string }>(),
+    supabase.from("menu_categories").select("*").order("sort_order"),
+    supabase.from("menu_items").select("*").order("sort_order"),
+  ]);
+
+  if (!table) notFound();
+
+  return (
+    <MenuClient
+      token={token}
+      tableName={table.name}
+      categories={(categories ?? []) as Category[]}
+      items={((items ?? []) as Partial<MenuItem>[]).map(withDefaults)}
+    />
+  );
+}
+
+// Tolerates rows from before the menu-discovery migration.
+function withDefaults(i: Partial<MenuItem>): MenuItem {
+  return {
+    ...(i as MenuItem),
+    diet: i.diet ?? "veg",
+    spice_level: i.spice_level ?? 0,
+    is_bestseller: i.is_bestseller ?? false,
+    badge: i.badge ?? null,
+    moods: i.moods ?? [],
+    is_combo: i.is_combo ?? false,
+    subcategory: i.subcategory ?? null,
+  };
+}
+
+function MenuSkeleton() {
+  return (
+    <div className="min-h-screen bg-white">
+      <div className="flex animate-pulse items-center gap-3 px-5 py-3 shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+        <div className="h-12 w-12 rounded-full bg-[#edf2f7]" />
+        <div className="h-5 w-36 rounded bg-[#edf2f7]" />
+      </div>
+      <div className="mx-auto max-w-md animate-pulse px-5">
+        <div className="mt-6 h-8 w-72 rounded bg-[#edf2f7]" />
+        <div className="mt-7 grid grid-cols-2 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="aspect-[5/6] rounded-2xl bg-[#edf2f7]" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

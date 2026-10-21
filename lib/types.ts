@@ -1,0 +1,45 @@
+export type Table = { id: string; name: string; qr_token: string; is_active: boolean; sort_order: number };
+export type Category = { id: string; name: string; sort_order: number; image_url: string | null };
+export type MenuItem = {
+  id: string;
+  category_id: string;
+  name: string;
+  description: string | null;
+  price_paise: number;
+  image_url: string | null;
+  is_available: boolean;
+  sort_order: number;
+  diet: Diet;
+  spice_level: number; // 0-3
+  is_bestseller: boolean;
+  badge: string | null;
+  moods: Mood[];
+  is_combo: boolean;
+  subcategory: string | null;
+};
+export type Diet = "veg" | "egg" | "nonveg";
+export type Mood = "meal" | "share" | "drink";
+export type OrderStatus = "open" | "paid" | "cancelled";
+export type OrderItemStatus = "pending" | "ready" | "served" | "void";
+export type Order = {
+  id: string;
+  table_id: string;
+  status: OrderStatus;
+  note: string | null;
+  created_at: string;
+  closed_at: string | null;
+};
+export type OrderItem = {
+  id: string;
+  order_id: string;
+  menu_item_id: string | null;
+  name_snapshot: string;
+  price_paise_snapshot: number;
+  qty: number;
+  note: string | null;
+  status: OrderItemStatus;
+  source: "customer" | "staff";
+  created_at: string;
+  ready_at: string | null;
+};
+export type CartLine = { menu_item_id: string; qty: number; note: string | null };
