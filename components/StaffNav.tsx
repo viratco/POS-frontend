@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
@@ -12,12 +12,13 @@ const links = [
 
 export default function StaffNav({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   async function signOut() {
     if (!confirm("Sign out of this device?")) return;
     await supabaseBrowser().auth.signOut();
-    router.replace("/login");
+    // Full reload so no signed-in pages linger in the router cache.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.assign("/login");
   }
 
   return (
@@ -38,6 +39,8 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
               <Link
                 key={l.href}
                 href={l.href}
+                // Don't prefetch: a prefetch made while signed out caches the redirect to /login.
+                prefetch={false}
                 className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
                   on ? "bg-white text-stone-900 shadow-sm" : "text-stone-500 hover:text-stone-800"
                 }`}

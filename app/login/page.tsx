@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
@@ -13,7 +13,6 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const router = useRouter();
   const params = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,9 +32,10 @@ function LoginForm() {
       setError(error.message === "Invalid login credentials" ? "Wrong email or password." : error.message);
       return;
     }
+    // Full page load (not router.replace): drops any pages the router cached while
+    // signed out, which would otherwise bounce straight back to /login.
     const next = params.get("next");
-    router.replace(next && next.startsWith("/") ? next : "/staff");
-    router.refresh();
+    window.location.assign(next && next.startsWith("/") && !next.startsWith("//") ? next : "/staff");
   }
 
   return (

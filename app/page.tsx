@@ -15,7 +15,7 @@ export default function Home() {
       <ul className="mt-6 space-y-3">
         {links.map((l) => (
           <li key={l.href}>
-            <Link href={l.href} className="block rounded-xl border border-stone-200 bg-white p-4 hover:border-stone-400">
+            <Link href={l.href} prefetch={false} className="block rounded-xl border border-stone-200 bg-white p-4 hover:border-stone-400">
               <div className="font-medium">{l.label}</div>
               <div className="text-sm text-stone-500">{l.hint}</div>
             </Link>
