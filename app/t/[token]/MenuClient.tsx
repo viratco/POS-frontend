@@ -366,25 +366,45 @@ function CategoryHeader({
   onOpenPicker: () => void;
 }) {
   // Once the guest scrolls, the bar collapses to "← CATEGORY ▾" like DotPe.
+  // Two thresholds (collapse past 80px, expand above 16px) so it can't flicker at the edge.
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 60);
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled((was) => (was ? y > 16 : y > 80));
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // The bar is fixed, and a spacer keeps its full (expanded) height in the page,
+  // so collapsing it never shifts the menu underneath (which caused a scroll loop).
+  const headerRef = useRef<HTMLElement>(null);
+  const [spacer, setSpacer] = useState(0);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || scrolled) return;
+    const measure = () => setSpacer(el.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scrolled, subs.length]);
+
   const pillsRef = useRef<HTMLDivElement>(null);
   const subsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    pillsRef.current?.querySelector(`[data-on="true"]`)?.scrollIntoView({ inline: "center", block: "nearest" });
+    centerActive(pillsRef.current, false);
   }, [current.id, scrolled]);
   useEffect(() => {
-    subsRef.current?.querySelector(`[data-on="true"]`)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    centerActive(subsRef.current, true);
   }, [activeSub]);
 
   return (
-    <header className="sticky top-0 z-20 bg-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.12)]">
+    <>
+    <div aria-hidden style={{ height: spacer }} />
+    <header ref={headerRef} className="fixed inset-x-0 top-0 z-20 bg-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.12)]">
       <div className="mx-auto max-w-md">
         <div className="flex h-16 items-center gap-3 px-5">
           <button onClick={onBack} aria-label="Back" className="-ml-1 p-1">
@@ -408,7 +428,7 @@ function CategoryHeader({
         </div>
 
         {!scrolled && (
-          <div ref={pillsRef} className="no-scrollbar flex gap-3 overflow-x-auto px-5 pb-3">
+          <div ref={pillsRef} className="no-scrollbar relative flex gap-3 overflow-x-auto px-5 pb-3">
             {tiles.map((t) => {
               const on = t.id === current.id;
               return (
@@ -428,7 +448,7 @@ function CategoryHeader({
         )}
 
         {subs.length > 1 && (
-          <div ref={subsRef} className="no-scrollbar flex gap-5 overflow-x-auto px-5 pt-1">
+          <div ref={subsRef} className="no-scrollbar relative flex gap-5 overflow-x-auto px-5 pt-1">
             {subs.map((s) => {
               const on = s.name === activeSub;
               return (
@@ -458,6 +478,7 @@ function CategoryHeader({
         )}
       </div>
     </header>
+    </>
   );
 }
 
@@ -720,4 +741,12 @@ function Arrow({ small = false }: { small?: boolean }) {
 
 function Spinner() {
   return <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />;
+}
+
+// Scroll a horizontal pill row so the active pill is centred, without touching
+// the page's vertical scroll (scrollIntoView can nudge the page on iOS Safari).
+function centerActive(row: HTMLElement | null, smooth: boolean) {
+  const el = row?.querySelector<HTMLElement>(`[data-on="true"]`);
+  if (!row || !el) return;
+  row.scrollTo({ left: el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2, behavior: smooth ? "smooth" : "auto" });
 }
