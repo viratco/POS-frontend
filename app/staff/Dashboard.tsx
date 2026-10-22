@@ -10,6 +10,7 @@ import { billFor, formatINR, GST_RATE_BPS } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Category, MenuItem, Order, OrderItem, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
+import CafeFloorPlan from "@/components/CafeFloorPlan";
 import { acceptOrder, staffAddItems } from "./actions";
 
 /* ───────────────────────── table states ───────────────────────── */
@@ -17,12 +18,12 @@ import { acceptOrder, staffAddItems } from "./actions";
 // Each state maps to the one thing staff should do next.
 type TableState = "available" | "new_order" | "food_ready" | "in_kitchen" | "served";
 
-const STATE: Record<TableState, { label: string; hint: string; stripe: string; chip: string; dot: string }> = {
-  new_order: { label: "New order", hint: "Check & accept", stripe: "bg-rose-500", chip: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" },
-  food_ready: { label: "Food ready", hint: "Serve now", stripe: "bg-sky-500", chip: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
-  in_kitchen: { label: "In kitchen", hint: "Being cooked", stripe: "bg-amber-400", chip: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-400" },
-  served: { label: "Served", hint: "Bill when asked", stripe: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
-  available: { label: "Available", hint: "", stripe: "bg-stone-200", chip: "bg-stone-100 text-stone-500 ring-stone-200", dot: "bg-stone-300" },
+const STATE: Record<TableState, { label: string; hint: string; stripe: string; chip: string; dot: string; glow: string }> = {
+  new_order: { label: "New order", hint: "Check & accept", stripe: "bg-rose-500", chip: "bg-rose-100/90 text-rose-800 ring-rose-200", dot: "bg-rose-500", glow: "ring-rose-400" },
+  food_ready: { label: "Food ready", hint: "Serve now", stripe: "bg-sky-500", chip: "bg-sky-100/90 text-sky-800 ring-sky-200", dot: "bg-sky-500", glow: "ring-sky-400" },
+  in_kitchen: { label: "In kitchen", hint: "Being cooked", stripe: "bg-amber-400", chip: "bg-amber-100/90 text-amber-900 ring-amber-200", dot: "bg-amber-400", glow: "ring-amber-400" },
+  served: { label: "Served", hint: "Bill when asked", stripe: "bg-emerald-500", chip: "bg-emerald-100/90 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500", glow: "ring-emerald-400" },
+  available: { label: "Available", hint: "", stripe: "bg-[#d8cebe]", chip: "bg-[#f4eee4] text-[#786959] ring-[#e2d7c7]", dot: "bg-[#b8aa96]", glow: "ring-[#e2d7c7]" },
 };
 
 function stateOf(items: OrderItem[] | undefined): TableState {
@@ -53,6 +54,7 @@ export default function Dashboard() {
   const [salesToday, setSalesToday] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [viewMode, setViewMode] = useState<"floorplan" | "cards">("floorplan");
   const [accepting, setAccepting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -152,6 +154,19 @@ export default function Dashboard() {
           : !r.order,
   );
 
+  // Floor-plan spots with no table yet: create them, or re-activate one that was switched off.
+  async function setupTables(names: string[]) {
+    const { error } = await supabase
+      .from("tables")
+      .upsert(names.map((name) => ({ name, is_active: true, sort_order: Number(name.replace(/\D/g, "")) * 10 })), { onConflict: "name" });
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    showToast(`Added ${names.join(", ")} — print their QR codes from the QR page`);
+    await load();
+  }
+
   async function accept(orderId: string, tableName: string, waiting: OrderItem[]) {
     // Open WhatsApp before any await, while we're still inside the tap (or browsers block it).
     if (waOn) openWhatsApp(kitchenTicket(tableName, waiting, "qr"));
@@ -174,11 +189,11 @@ export default function Dashboard() {
   const selected = rows.find((r) => r.table.id === selectedId) ?? null;
 
   return (
-    <div className="min-h-screen bg-[#f6f4f1] text-stone-900">
+    <div className="min-h-screen bg-[#faf7f2] text-[#2a2119]">
       <StaffNav>
         <span
           className={`hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold sm:flex ${
-            live ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+            live ? "bg-emerald-100/80 text-emerald-800 ring-1 ring-emerald-300" : "bg-red-100/80 text-red-800 ring-1 ring-red-300"
           }`}
         >
           <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-emerald-500" : "animate-pulse bg-red-500"}`} />
@@ -190,7 +205,7 @@ export default function Dashboard() {
 
       <main className="mx-auto max-w-[1400px] px-4 pt-5 pb-16 sm:px-6">
         {error && (
-          <div className="mb-4 flex items-center justify-between rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
+          <div className="mb-4 flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
             {error}
             <button onClick={() => setError(null)} className="font-semibold">
               Dismiss
@@ -200,51 +215,113 @@ export default function Dashboard() {
 
         {/* At a glance */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
-          <Stat label="Tables in use" value={`${counts.occupied}/${tables.length}`} />
-          <Stat label="New orders" value={String(waitingOrders.length)} tone={waitingOrders.length ? "rose" : undefined} />
-          <Stat label="Ready to serve" value={`${counts.readyItems} items`} tone={counts.readyItems ? "sky" : undefined} />
-          <Stat label="In kitchen" value={`${counts.kitchenItems} items`} />
-          <Stat label="Today's sales" value={formatINR(salesToday)} className="col-span-2 md:col-span-1" />
+          <Stat
+            label="Tables in use"
+            value={`${counts.occupied}/${tables.length}`}
+            icon={
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <rect x="3" y="4" width="18" height="12" rx="2" />
+                <path d="M7 16v4M17 16v4" />
+              </svg>
+            }
+          />
+          <Stat
+            label="New orders"
+            value={String(waitingOrders.length)}
+            tone={waitingOrders.length ? "rose" : undefined}
+            icon={
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+              </svg>
+            }
+          />
+          <Stat
+            label="Ready to serve"
+            value={`${counts.readyItems} items`}
+            tone={counts.readyItems ? "sky" : undefined}
+            icon={
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M4 18h16M12 5v2M8 18a4 4 0 018 0" />
+              </svg>
+            }
+          />
+          <Stat
+            label="In kitchen"
+            value={`${counts.kitchenItems} items`}
+            tone={counts.kitchenItems ? "amber" : undefined}
+            icon={
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path d="M12 4v4m0 0a4 4 0 01-4 4H5v2h14v-2h-3a4 4 0 01-4-4z" />
+              </svg>
+            }
+          />
+          <Stat
+            label="Today's sales"
+            value={formatINR(salesToday)}
+            tone="gold"
+            className="col-span-2 md:col-span-1"
+            icon={
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9 8h6M9 12h5M9 8v8M13 12l3 4" />
+              </svg>
+            }
+          />
         </div>
 
         {/* 1. New orders need an OK first */}
         {waitingOrders.length > 0 && (
-          <section className="mt-6">
-            <h2 className="flex flex-wrap items-center gap-x-2.5 text-lg font-bold">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-600" />
-              </span>
-              New orders
-              <span className="text-sm font-medium text-stone-500">Check the guests are seated, then accept</span>
-            </h2>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <section className="mt-6 rounded-3xl border border-rose-300 bg-gradient-to-br from-rose-50/90 to-[#fff8f8] p-4.5 shadow-sm sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2.5 text-lg font-bold text-rose-950">
+                <span className="relative flex h-3.5 w-3.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-75" />
+                  <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-rose-600" />
+                </span>
+                New Orders Needing Confirmation
+                <span className="rounded-full bg-rose-200/90 px-2.5 py-0.5 text-xs font-bold text-rose-800">
+                  {waitingOrders.length}
+                </span>
+              </h2>
+              <span className="text-xs font-medium text-rose-700">Check the guests are seated, then accept to dispatch</span>
+            </div>
+            <div className="mt-3.5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {waitingOrders.map(({ order, table, waiting }) => (
-                <div key={order!.id} className="flex flex-col rounded-2xl bg-white p-4 shadow-sm ring-2 ring-rose-200">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-2xl font-bold tracking-tight">{table.name}</span>
-                    <span className="text-sm font-medium text-rose-600">{now ? ago(waiting[0].created_at, now) : ""}</span>
+                <div key={order!.id} className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm ring-2 ring-rose-200/50">
+                  <div>
+                    <div className="flex items-baseline justify-between border-b border-rose-100 pb-2">
+                      <span className="text-2xl font-bold tracking-tight text-[#2a2119]">{table.name}</span>
+                      <span className="flex items-center gap-1 text-xs font-semibold text-rose-600">
+                        <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                        {now ? ago(waiting[0].created_at, now) : ""}
+                      </span>
+                    </div>
+                    <ul className="mt-2.5 space-y-1.5">
+                      {waiting.map((i) => (
+                        <li key={i.id} className="flex items-start justify-between text-[14px] leading-snug">
+                          <div>
+                            <span className="font-bold text-[#2a2119]">{i.qty}×</span> {i.name_snapshot}
+                            {i.note && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">{i.note}</span>}
+                          </div>
+                          <span className="text-xs font-semibold text-stone-500 tabular-nums">
+                            {formatINR(i.price_paise_snapshot * i.qty)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="mt-2 flex-1 space-y-1.5">
-                    {waiting.map((i) => (
-                      <li key={i.id} className="text-[15px] leading-snug">
-                        <span className="font-bold">{i.qty}×</span> {i.name_snapshot}
-                        {i.note && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">{i.note}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 flex gap-2 pt-2 border-t border-rose-50">
                     <button
                       disabled={accepting === order!.id}
                       onClick={() => accept(order!.id, table.name, waiting)}
-                      className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-[15px] font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60"
+                      className="flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60"
                     >
-                      {accepting === order!.id ? "Sending…" : "✓ Accept & send to kitchen"}
+                      {accepting === order!.id ? "Sending…" : "✓ Accept & Send to Kitchen"}
                     </button>
                     <button
                       disabled={accepting === order!.id}
                       onClick={() => reject(table.name, waiting)}
-                      className="h-12 rounded-xl px-4 font-semibold text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-50"
+                      className="h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-50"
                     >
                       Reject
                     </button>
@@ -258,38 +335,95 @@ export default function Dashboard() {
         {/* 2. All tables */}
         <section className="mt-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-bold">Tables</h2>
-            <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-white p-1 shadow-sm ring-1 ring-stone-200">
-              {(
-                [
-                  ["all", "All", tables.length],
-                  ["action", "Needs action", counts.action],
-                  ["occupied", "In use", counts.occupied],
-                  ["available", "Available", counts.available],
-                ] as const
-              ).map(([key, label, n]) => (
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold tracking-tight text-[#2a2119]">Tables &amp; Layout</h2>
+              <span className="rounded-full bg-[#f0e7d8] px-2.5 py-0.5 text-xs font-semibold text-[#6e5d4e]">
+                {counts.occupied} in use · {counts.available} free
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* View Switcher: Cards vs Floor Plan */}
+              <div className="flex items-center rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
                 <button
-                  key={key}
-                  onClick={() => setFilter(key)}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                    filter === key ? "bg-stone-900 text-white" : "text-stone-500 hover:text-stone-800"
+                  onClick={() => setViewMode("cards")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                    viewMode === "cards" ? "bg-[#2a2119] text-[#f5ebd9] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
                   }`}
                 >
-                  {label}
-                  <span className={`rounded-full px-1.5 text-xs ${filter === key ? "bg-white/20" : "bg-stone-100"}`}>{n}</span>
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                  </svg>
+                  <span>Cards</span>
                 </button>
-              ))}
+                <button
+                  onClick={() => setViewMode("floorplan")}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                    viewMode === "floorplan" ? "bg-[#2a2119] text-[#f5ebd9] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                  }`}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
+                    <path d="M3 3h18v18H3zM3 9h18M9 21V9" />
+                  </svg>
+                  <span>Floor Plan</span>
+                </button>
+              </div>
+
+              {/* Filter Pills */}
+              <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
+                {(
+                  [
+                    ["all", "All", tables.length],
+                    ["action", "Needs action", counts.action],
+                    ["occupied", "In use", counts.occupied],
+                    ["available", "Available", counts.available],
+                  ] as const
+                ).map(([key, label, n]) => (
+                  <button
+                    key={key}
+                    onClick={() => setFilter(key)}
+                    className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      filter === key ? "bg-[#2a2119] text-[#f5ebd9]" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                    }`}
+                  >
+                    {label}
+                    <span className={`rounded-full px-1.5 text-[11px] ${filter === key ? "bg-white/20 text-white" : "bg-[#f4eee4] text-[#6d5e50]"}`}>
+                      {n}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
-            {visibleRows.map((r) => (
-              <TableCard key={r.table.id} {...r} now={now} selected={r.table.id === selectedId} onClick={() => setSelectedId(r.table.id)} />
-            ))}
-            {visibleRows.length === 0 && (
-              <p className="col-span-full rounded-2xl bg-white py-10 text-center text-stone-400 ring-1 ring-stone-200">Nothing here right now.</p>
-            )}
-          </div>
+          {/* Conditional View: Floor Plan vs Card Grid */}
+          {viewMode === "floorplan" ? (
+            <div className="mt-4">
+              <CafeFloorPlan
+                rows={rows}
+                visibleIds={filter === "all" ? undefined : new Set(visibleRows.map((r) => r.table.id))}
+                selectedId={selectedId}
+                onSelectTable={setSelectedId}
+                now={now}
+                ago={ago}
+                onSetupTables={setupTables}
+              />
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-4">
+              {visibleRows.map((r) => (
+                <TableCard key={r.table.id} {...r} now={now} selected={r.table.id === selectedId} onClick={() => setSelectedId(r.table.id)} />
+              ))}
+              {visibleRows.length === 0 && (
+                <p className="col-span-full rounded-2xl border border-[#ded3c2] bg-white py-12 text-center text-[#8a7b6b]">
+                  No tables match this filter right now.
+                </p>
+              )}
+            </div>
+          )}
 
           <Legend />
         </section>
@@ -313,7 +447,7 @@ export default function Dashboard() {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 animate-toast rounded-full bg-stone-900 px-5 py-3 text-sm font-semibold whitespace-nowrap text-white shadow-xl">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 animate-toast rounded-full bg-[#2a2119] px-5 py-3 text-sm font-semibold whitespace-nowrap text-[#f5ebd9] shadow-xl">
           {toast}
         </div>
       )}
@@ -321,13 +455,48 @@ export default function Dashboard() {
   );
 }
 
-function Stat({ label, value, tone, className = "" }: { label: string; value: string; tone?: "rose" | "sky"; className?: string }) {
-  const toneCls =
-    tone === "rose" ? "bg-rose-50 ring-rose-200 text-rose-700" : tone === "sky" ? "bg-sky-50 ring-sky-200 text-sky-700" : "bg-white ring-stone-200";
+function Stat({
+  label,
+  value,
+  tone,
+  icon,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  tone?: "rose" | "sky" | "amber" | "gold";
+  icon?: React.ReactNode;
+  className?: string;
+}) {
+  const toneBg =
+    tone === "rose"
+      ? "bg-rose-50/70 border-rose-200/80 text-rose-950"
+      : tone === "sky"
+        ? "bg-sky-50/70 border-sky-200/80 text-sky-950"
+        : tone === "amber"
+          ? "bg-amber-50/70 border-amber-200/80 text-amber-950"
+          : tone === "gold"
+            ? "bg-[#fffdf8] border-[#ded3c2] text-[#2a2119]"
+            : "bg-white/90 border-[#ebe2d4] text-[#2a2119]";
+
+  const iconBg =
+    tone === "rose"
+      ? "bg-rose-100 text-rose-700"
+      : tone === "sky"
+        ? "bg-sky-100 text-sky-700"
+        : tone === "amber"
+          ? "bg-amber-100 text-amber-800"
+          : tone === "gold"
+            ? "bg-[#f5ebd9] text-[#8a6828]"
+            : "bg-[#f4eee4] text-[#786959]";
+
   return (
-    <div className={`rounded-2xl px-4 py-3 shadow-sm ring-1 ${toneCls} ${className}`}>
-      <div className="text-xs font-semibold tracking-wide text-stone-500 uppercase">{label}</div>
-      <div className="mt-0.5 text-2xl font-bold tracking-tight tabular-nums">{value}</div>
+    <div className={`relative flex flex-col justify-between rounded-2xl border p-4 shadow-sm backdrop-blur-sm transition hover:shadow-md ${toneBg} ${className}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-xs font-bold tracking-wider text-[#8a7b6b] uppercase">{label}</span>
+        {icon && <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconBg}`}>{icon}</span>}
+      </div>
+      <div className="mt-2 text-2xl font-black tracking-tight tabular-nums text-[#2a2119]">{value}</div>
     </div>
   );
 }
@@ -335,12 +504,13 @@ function Stat({ label, value, tone, className = "" }: { label: string; value: st
 function Legend() {
   const order: TableState[] = ["new_order", "food_ready", "in_kitchen", "served", "available"];
   return (
-    <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-stone-500">
+    <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[#ece3d6] bg-white/70 px-4 py-2.5 text-xs text-[#7a6b5c] backdrop-blur-sm">
+      <span className="font-bold text-[#2a2119] uppercase tracking-wider text-[11px]">Legend:</span>
       {order.map((s) => (
         <span key={s} className="flex items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${STATE[s].dot}`} />
-          <span className="font-semibold text-stone-700">{STATE[s].label}</span>
-          {STATE[s].hint && <span>· {STATE[s].hint}</span>}
+          <span className="font-semibold text-[#2a2119]">{STATE[s].label}</span>
+          {STATE[s].hint && <span className="text-[#8a7b6b]">· {STATE[s].hint}</span>}
         </span>
       ))}
     </div>
@@ -367,40 +537,112 @@ function TableCard({
   const s = STATE[state];
   const n = (st: OrderItem["status"]) => items.filter((i) => i.status === st).reduce((c, i) => c + i.qty, 0);
   const liveCount = items.filter((i) => i.status !== "void").reduce((c, i) => c + i.qty, 0);
+  const tableImg = "/tables/table-topdown.png";
+
+  // Determine stage progress for active orders (0: new, 1: kitchen, 2: ready, 3: served)
+  const currentStage = state === "new_order" ? 0 : state === "in_kitchen" ? 1 : state === "food_ready" ? 2 : 3;
+
   return (
     <button
       onClick={onClick}
-      className={`relative flex min-h-[148px] flex-col overflow-hidden rounded-2xl p-4 pl-5 text-left shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99] ${
-        selected ? "ring-2 ring-stone-900" : "ring-stone-200"
-      } ${order ? "bg-white" : "bg-white/60"}`}
+      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] ${
+        selected ? "border-[#2a2119] ring-2 ring-[#2a2119]" : "border-[#e5ded4] hover:border-[#cbbfad]"
+      } ${order ? "bg-[#fffdfb] shadow-sm" : "bg-[#fcfaf7]/90 hover:bg-white shadow-xs"}`}
     >
-      <span className={`absolute inset-y-0 left-0 w-1.5 ${s.stripe} ${state === "new_order" ? "animate-pulse" : ""}`} />
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <div className="text-xl font-bold tracking-tight">{table.name}</div>
-          <div className="mt-0.5 text-xs font-medium text-stone-400">{order ? `Open ${now ? ago(order.created_at, now) : ""}` : "Free"}</div>
+      {/* Left Accent Stripe */}
+      <span className={`absolute inset-y-0 left-0 w-1.5 z-20 ${s.stripe} ${state === "new_order" ? "animate-pulse" : ""}`} />
+
+      {/* Realistic Table Hero Image Section */}
+      <div className="relative aspect-[16/11] w-full overflow-hidden bg-gradient-to-b from-[#f5ede0] to-[#ece1cf]/80 p-2">
+        <img
+          src={tableImg}
+          alt={table.name}
+          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-md"
+        />
+
+        {/* Floating Top Header Badges */}
+        <div className="absolute inset-x-2.5 top-2.5 flex items-center justify-between gap-1 z-10">
+          <span className="flex items-center gap-1.5 rounded-lg bg-[#2a2119]/85 px-2.5 py-1 text-xs font-bold text-[#f5ebd9] backdrop-blur-md shadow-sm">
+            <span>{table.name}</span>
+          </span>
+          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-md ${s.chip}`}>
+            {s.label}
+          </span>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${s.chip}`}>{s.label}</span>
+
+        {/* Floating Bottom Info on Image */}
+        <div className="absolute inset-x-2.5 bottom-2 flex items-center justify-between text-[11px] font-medium text-[#2a2119] z-10">
+          <span className="flex items-center gap-1 rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold backdrop-blur-xs shadow-xs">
+            <svg viewBox="0 0 24 24" className="h-3 w-3 text-[#a89b88]" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            <span>{order ? (now ? ago(order.created_at, now) : "Open") : "Free"}</span>
+          </span>
+          <span className="rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold text-[#6d5e50] backdrop-blur-xs shadow-xs">
+            4 Seats
+          </span>
+        </div>
       </div>
 
-      {order ? (
-        <>
-          <div className="mt-3 flex flex-wrap gap-1.5 text-xs font-semibold">
-            {n("new") > 0 && <span className="rounded-md bg-rose-50 px-2 py-0.5 text-rose-700">{n("new")} waiting</span>}
-            {n("ready") > 0 && <span className="rounded-md bg-sky-50 px-2 py-0.5 text-sky-700">{n("ready")} ready</span>}
-            {n("pending") > 0 && <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-800">{n("pending")} cooking</span>}
-            {n("served") > 0 && <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-emerald-700">{n("served")} served</span>}
+      {/* Card Body */}
+      <div className="flex flex-1 flex-col justify-between p-3.5 sm:p-4">
+        {order ? (
+          <div className="space-y-2.5">
+            {/* Visual 4-stage mini progress bar */}
+            <div className="grid grid-cols-4 gap-1">
+              {[
+                { label: "New", color: "bg-rose-500" },
+                { label: "Kitchen", color: "bg-amber-400" },
+                { label: "Ready", color: "bg-sky-500" },
+                { label: "Served", color: "bg-emerald-500" },
+              ].map((step, idx) => (
+                <div key={step.label} className="flex flex-col gap-1">
+                  <div
+                    className={`h-1.5 rounded-full transition-all ${
+                      idx <= currentStage ? step.color : "bg-[#ece4d8]"
+                    }`}
+                  />
+                  <span className={`text-[9px] font-semibold text-center ${idx === currentStage ? "text-[#2a2119]" : "text-[#a89b88]"}`}>
+                    {step.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Item status chips */}
+            <div className="flex flex-wrap gap-1 text-[11px] font-semibold pt-0.5">
+              {n("new") > 0 && <span className="rounded-md bg-rose-50 px-2 py-0.5 text-rose-700 ring-1 ring-rose-200">{n("new")} new</span>}
+              {n("ready") > 0 && <span className="rounded-md bg-sky-50 px-2 py-0.5 text-sky-700 ring-1 ring-sky-200">{n("ready")} ready</span>}
+              {n("pending") > 0 && <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200">{n("pending")} cooking</span>}
+              {n("served") > 0 && <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-200">{n("served")} served</span>}
+            </div>
+
+            {/* Bottom Row */}
+            <div className="flex items-end justify-between border-t border-[#f0e7d8] pt-2">
+              <span className="text-xs font-medium text-[#8a7b6b]">{liveCount} item{liveCount !== 1 ? "s" : ""}</span>
+              <span className="text-xl font-extrabold text-[#2a2119] tabular-nums tracking-tight">
+                {formatINR(billFor(items).total)}
+              </span>
+            </div>
           </div>
-          <div className="mt-auto flex items-end justify-between pt-3">
-            <span className="text-sm text-stone-500">{liveCount} items</span>
-            <span className="text-xl font-bold tabular-nums">{formatINR(billFor(items).total)}</span>
+        ) : (
+          <div className="flex flex-1 flex-col justify-between py-1">
+            <p className="text-xs text-[#8a7b6b] leading-relaxed">
+              Available for guests. QR code active on table.
+            </p>
+            <div className="mt-3 flex items-center justify-between border-t border-dashed border-[#ece2d4] pt-2 text-xs font-semibold text-[#8a7b6b] group-hover:text-[#2a2119]">
+              <span className="flex items-center gap-1.5">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f4eee4] text-xs font-bold text-[#6d5e50] group-hover:bg-[#2a2119] group-hover:text-white transition">
+                  +
+                </span>
+                Start an order
+              </span>
+              <span className="rounded bg-[#f4eee4] px-1.5 py-0.5 text-[10px] text-[#6d5e50]">Ready</span>
+            </div>
           </div>
-        </>
-      ) : (
-        <div className="mt-auto flex items-center gap-1.5 pt-3 text-sm font-medium text-stone-400">
-          <span className="text-lg leading-none">+</span> Start an order
-        </div>
-      )}
+        )}
+      </div>
     </button>
   );
 }
@@ -1037,10 +1279,10 @@ function WhatsAppToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
       role="switch"
       aria-checked={on}
       onClick={onToggle}
-      className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-stone-600 ring-1 ring-stone-200"
+      className="flex items-center gap-2 rounded-xl border border-[#ded3c2] bg-white px-3 py-2 text-xs font-semibold text-[#5a4b3d] shadow-sm transition hover:bg-[#fcfaf7]"
       title="When on, accepting an order opens WhatsApp with the kitchen ticket ready to send"
     >
-      <span className={`relative h-4 w-7 rounded-full transition ${on ? "bg-emerald-500" : "bg-stone-300"}`}>
+      <span className={`relative h-4 w-7 rounded-full transition ${on ? "bg-emerald-500" : "bg-[#ded3c2]"}`}>
         <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${on ? "left-3.5" : "left-0.5"}`} />
       </span>
       <span className="hidden md:inline">WhatsApp group</span>
