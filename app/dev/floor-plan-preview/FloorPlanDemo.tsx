@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
 import type { Order, OrderItem, Table } from "@/lib/types";
 
@@ -27,12 +27,8 @@ function ago(iso: string, now: number) {
 
 const STATUS: Record<State, OrderItem["status"]> = { available: "served", new_order: "new", food_ready: "ready", in_kitchen: "pending", served: "served" };
 
-export default function FloorPlanDemo() {
-  const [now, setNow] = useState(0);
+export default function FloorPlanDemo({ now }: { now: number }) {
   const [selected, setSelected] = useState<string | null>(null);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setNow(Date.now()), []);
-  if (!now) return null;
 
   const rows = DEMO.map(([name, state, minsAgo, n], i) => {
     const table: Table = { id: `t${i}`, name, qr_token: "", is_active: true, sort_order: i };
