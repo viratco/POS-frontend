@@ -35,6 +35,11 @@ function stateOf(items: OrderItem[] | undefined): TableState {
   return "served";
 }
 
+// Opens a printable view in a new tab; call directly from a click handler.
+function openPrint(orderId: string, type: "bill" | "receipt" | "kot") {
+  window.open(`/staff/print/${orderId}?type=${type}&auto=1`, "_blank");
+}
+
 function ago(iso: string, now: number) {
   const m = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
   if (m === 0) return "just now";
@@ -676,7 +681,8 @@ function TableDrawer({
 }) {
   const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
-  const [paying, setPaying] = useState(false);
+  // The order being charged; kept even after the table frees up, so the receipt can print.
+  const [paying, setPaying] = useState<Order | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -825,12 +831,20 @@ function TableDrawer({
               tone="amber"
               count={cooking.length}
               action={
-                <button
-                  onClick={() => openWhatsApp(kitchenTicket(table.name, cooking, "qr").replace("NEW ORDER", "REMINDER"))}
-                  className="rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
-                >
-                  Resend on WhatsApp
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => order && openPrint(order.id, "kot")}
+                    className="rounded-lg px-2.5 py-1 text-xs font-bold text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
+                  >
+                    🖨 KOT
+                  </button>
+                  <button
+                    onClick={() => openWhatsApp(kitchenTicket(table.name, cooking, "qr").replace("NEW ORDER", "REMINDER"))}
+                    className="rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+                  >
+                    Resend on WhatsApp
+                  </button>
+                </div>
               }
             >
               {cooking.map((i) => (
@@ -886,8 +900,16 @@ function TableDrawer({
                 + Add
               </button>
               <button
+                disabled={bill.subtotal === 0}
+                onClick={() => openPrint(order.id, "bill")}
+                title="Print the bill for the guest"
+                className="h-14 rounded-xl px-4 font-bold text-stone-800 ring-1 ring-stone-300 transition hover:bg-stone-50 disabled:opacity-40"
+              >
+                🖨 Bill
+              </button>
+              <button
                 disabled={busy || bill.subtotal === 0}
-                onClick={() => setPaying(true)}
+                onClick={() => setPaying(order)}
                 className="flex h-14 flex-1 items-center justify-between rounded-xl bg-stone-900 px-5 font-bold text-white shadow-sm transition hover:bg-stone-800 active:scale-[0.99] disabled:opacity-40"
               >
                 <span>Take payment</span>
@@ -915,22 +937,24 @@ function TableDrawer({
         />
       )}
 
-      {paying && order && (
+      {paying && (
         <PaymentModal
           tableName={table.name}
           bill={bill}
           waitingCount={waiting.length}
           busy={busy}
-          onClose={() => setPaying(false)}
+          onClose={() => setPaying(null)}
           onPay={async (method) => {
             const ok = await run(
-              () => supabase.rpc("close_order", { p_order_id: order.id, p_method: method, p_gst_rate_bps: GST_RATE_BPS }),
+              () => supabase.rpc("close_order", { p_order_id: paying.id, p_method: method, p_gst_rate_bps: GST_RATE_BPS }),
               `✓ ${table.name} paid by ${method === "upi" ? "UPI" : "cash"} · table is free`,
             );
-            if (ok) {
-              setPaying(false);
-              onClose();
-            }
+            return ok;
+          }}
+          onPrintReceipt={() => openPrint(paying.id, "receipt")}
+          onDone={() => {
+            setPaying(null);
+            onClose();
           }}
         />
       )}
@@ -1067,14 +1091,51 @@ function PaymentModal({
   busy,
   onClose,
   onPay,
+  onPrintReceipt,
+  onDone,
 }: {
   tableName: string;
   bill: ReturnType<typeof billFor>;
   waitingCount: number;
   busy: boolean;
   onClose: () => void;
-  onPay: (method: "upi" | "cash") => void;
+  onPay: (method: "upi" | "cash") => Promise<boolean>;
+  onPrintReceipt: () => void;
+  onDone: () => void;
 }) {
+  const [paidBy, setPaidBy] = useState<"upi" | "cash" | null>(null);
+  const [paidTotal] = useState(bill.total);
+
+  async function pay(method: "upi" | "cash") {
+    if (await onPay(method)) setPaidBy(method);
+  }
+
+  if (paidBy) {
+    return (
+      <Modal onClose={onDone}>
+        <div className="flex flex-col items-center p-6 text-center">
+          <div className="flex h-16 w-16 animate-pop items-center justify-center rounded-full bg-emerald-600 text-white">
+            <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </div>
+          <p className="mt-4 text-sm font-semibold text-stone-500">{tableName} · paid by {paidBy === "upi" ? "UPI" : "cash"}</p>
+          <div className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{formatINR(paidTotal)}</div>
+          <p className="mt-1 text-sm text-stone-500">The table is free again.</p>
+          <button
+            onClick={onPrintReceipt}
+            className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 text-lg font-bold text-white hover:bg-stone-800"
+          >
+            🖨 Print receipt
+          </button>
+          <button onClick={onDone} className="mt-3 h-12 w-full rounded-xl font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50">
+            Done
+          </button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal onClose={onClose}>
       <div className="p-6">
@@ -1092,7 +1153,7 @@ function PaymentModal({
         <div className="mt-2 grid grid-cols-2 gap-3">
           <button
             disabled={busy}
-            onClick={() => onPay("upi")}
+            onClick={() => pay("upi")}
             className="flex h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
           >
             <span className="text-2xl">📱</span>
@@ -1100,7 +1161,7 @@ function PaymentModal({
           </button>
           <button
             disabled={busy}
-            onClick={() => onPay("cash")}
+            onClick={() => pay("cash")}
             className="flex h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
           >
             <span className="text-2xl">💵</span>

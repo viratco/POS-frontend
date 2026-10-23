@@ -23,3 +23,14 @@ export function billFor(lines: { price_paise_snapshot: number; qty: number; stat
   const gst = gstPaise(subtotal);
   return { subtotal, gst, total: subtotal + gst, rateBps: GST_RATE_BPS };
 }
+
+// Intra-state GST is split equally into CGST + SGST; any odd paisa goes to SGST.
+export function gstSplit(gstPaise: number) {
+  const cgst = Math.floor(gstPaise / 2);
+  return { cgst, sgst: gstPaise - cgst };
+}
+
+// Plain 2-decimal amount for printed bills, e.g. 35000 -> "350.00".
+export function amount(paise: number) {
+  return (paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

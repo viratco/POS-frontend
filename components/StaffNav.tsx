@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
   { href: "/staff", label: "Tables", icon: "M4 5h16v4H4zM6 9v10M18 9v10" },
+  { href: "/staff/bills", label: "Bills", icon: "M6 3h12v18l-3-2-3 2-3-2-3 2zM9 8h6M9 12h6" },
   { href: "/admin", label: "Menu", icon: "M6 4h12v16H6zM9 8h6M9 12h6M9 16h4" },
   { href: "/admin/analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
   { href: "/qr", label: "QR codes", icon: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2" },

@@ -28,6 +28,11 @@ export type Order = {
   note: string | null;
   created_at: string;
   closed_at: string | null;
+  invoice_no?: string | null;
+  subtotal_paise?: number | null;
+  gst_rate_bps?: number | null;
+  gst_paise?: number | null;
+  total_paise?: number | null;
 };
 export type OrderItem = {
   id: string;
