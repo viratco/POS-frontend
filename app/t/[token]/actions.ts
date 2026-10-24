@@ -12,6 +12,7 @@ const MESSAGES: Record<string, string> = {
   invalid_table: "This table's QR code isn't active. Please ask a staff member.",
   item_unavailable: "Something in your cart just sold out. Please review your cart.",
   invalid_cart: "Your cart is empty or too large.",
+  slow_down: "Lots of orders from this table just now. Please wait a minute, or ask a staff member.",
 };
 
 export async function placeOrder(token: string, lines: CartLine[]): Promise<PlaceOrderResult> {

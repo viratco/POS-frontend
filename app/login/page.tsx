@@ -4,6 +4,19 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
+// Only follow ?next= to a page on this site. Blocks tricks like "/\\evil.com" or "//evil.com",
+// which browsers treat as another website (a phishing redirect after sign-in).
+function safeNext(next: string | null) {
+  if (!next) return "/staff";
+  try {
+    const url = new URL(next, window.location.origin);
+    if (url.origin !== window.location.origin) return "/staff";
+    return url.pathname + url.search;
+  } catch {
+    return "/staff";
+  }
+}
+
 export default function LoginPage() {
   return (
     <Suspense>
@@ -34,8 +47,7 @@ function LoginForm() {
     }
     // Full page load (not router.replace): drops any pages the router cached while
     // signed out, which would otherwise bounce straight back to /login.
-    const next = params.get("next");
-    window.location.assign(next && next.startsWith("/") && !next.startsWith("//") ? next : "/staff");
+    window.location.assign(safeNext(params.get("next")));
   }
 
   return (

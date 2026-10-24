@@ -35,6 +35,15 @@ function stateOf(items: OrderItem[] | undefined): TableState {
   return "served";
 }
 
+// Plain-language versions of the database's safety checks.
+function friendlyError(msg: string) {
+  if (msg.includes("order_closed")) return "This bill is already closed and can't be changed. Refresh the page.";
+  if (msg.includes("invalid_status_change")) return "That item can't be moved back. Refresh the page.";
+  if (msg.includes("use_close_order")) return "Use Take payment to close a bill.";
+  if (msg.includes("permission denied")) return "You don't have permission to do that.";
+  return msg;
+}
+
 // Opens a printable view in a new tab; call directly from a click handler.
 function openPrint(orderId: string, type: "bill" | "receipt" | "kot") {
   window.open(`/staff/print/${orderId}?type=${type}&auto=1`, "_blank");
@@ -706,7 +715,7 @@ function TableDrawer({
     setError(null);
     const { error } = await fn();
     setBusy(false);
-    if (error) setError(error.message);
+    if (error) setError(friendlyError(error.message));
     else if (done) toast(done);
     onChanged();
     return !error;
@@ -959,7 +968,7 @@ function TableDrawer({
             setBusy(false);
             onChanged();
             if (error) {
-              setError(error.message === "invalid_discount" ? "That discount isn't valid." : error.message);
+              setError(error.message === "invalid_discount" ? "That discount isn't valid." : friendlyError(error.message));
               return null;
             }
             const total = (data as Order).total_paise ?? 0;

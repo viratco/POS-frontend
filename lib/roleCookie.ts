@@ -10,11 +10,13 @@ export const ROLE_TTL_SECONDS = 10 * 60; // a role change takes effect within 10
 const enc = new TextEncoder();
 let keyPromise: Promise<CryptoKey | null> | undefined;
 
-// Derived from KITCHEN_SECRET (already a server-only random secret) with a purpose label.
+// Uses its own secret. (It used to be derived from KITCHEN_SECRET, but that value is in
+// the kitchen tablet's URL, so anyone who saw the link could have forged a "staff" cookie.)
+// Without ROLE_COOKIE_SECRET the role isn't cached and the proxy checks the database each time.
 function key(): Promise<CryptoKey | null> {
   keyPromise ??= (async () => {
-    const secret = process.env.KITCHEN_SECRET;
-    if (!secret || secret.length < 16) return null;
+    const secret = process.env.ROLE_COOKIE_SECRET;
+    if (!secret || secret.length < 32) return null;
     const base = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
     const derived = await crypto.subtle.sign("HMAC", base, enc.encode("sohee:role-cookie:v1"));
     return crypto.subtle.importKey("raw", derived, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
