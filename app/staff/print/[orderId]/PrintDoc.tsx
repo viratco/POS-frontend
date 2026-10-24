@@ -135,6 +135,7 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
   const subtotal = paid ? (order.subtotal_paise ?? live.subtotal) : live.subtotal;
   const gst = paid ? (order.gst_paise ?? live.gst) : live.gst;
   const total = paid ? (order.total_paise ?? live.total) : live.total;
+  const discount = paid ? (order.discount_paise ?? 0) : 0;
   const rateBps = paid ? (order.gst_rate_bps ?? live.rateBps) : live.rateBps;
   const { cgst, sgst } = gstSplit(gst);
   const halfRate = rateBps / 200;
@@ -181,6 +182,12 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
       <Hr />
 
       <Line left={`Subtotal (${billed.reduce((n, i) => n + i.qty, 0)} items)`} right={amount(subtotal)} />
+      {discount > 0 && (
+        <>
+          <Line left={`Discount${order.discount_reason ? ` (${order.discount_reason})` : ""}`} right={`- ${amount(discount)}`} />
+          <Line left="Taxable value" right={amount(subtotal - discount)} />
+        </>
+      )}
       {gst > 0 && (
         <>
           <Line left={`CGST @ ${halfRate}%`} right={amount(cgst)} />

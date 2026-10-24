@@ -26,7 +26,13 @@ export type AOrder = {
   closed_at: string | null;
   subtotal_paise: number | null;
   total_paise: number | null;
+  gst_paise?: number | null;
 };
+
+// Net sales = what was actually charged before GST (i.e. after any discount).
+function netOf(o: AOrder) {
+  return o.total_paise != null && o.gst_paise != null ? o.total_paise - o.gst_paise : (o.subtotal_paise ?? 0);
+}
 export type AItem = {
   order_id: string;
   menu_item_id: string | null;
@@ -158,7 +164,7 @@ export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: nu
   const paid = (os: AOrder[]) => os.filter((o) => o.status === "paid");
   const curPaid = paid(curOrders);
   const prevPaid = paid(prevOrders);
-  const net = (os: AOrder[]) => os.reduce((s, o) => s + (o.subtotal_paise ?? 0), 0);
+  const net = (os: AOrder[]) => os.reduce((s, o) => s + netOf(o), 0);
   const qtySold = (is: AItem[]) => is.filter(isSold).reduce((s, i) => s + i.qty, 0);
 
   const netCur = net(curPaid);
@@ -182,7 +188,7 @@ export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: nu
   for (const o of curPaid) {
     const idx = Math.floor((istDayStart(new Date(o.created_at).getTime()) - w.from) / DAY_MS);
     if (daily[idx]) {
-      daily[idx].net += o.subtotal_paise ?? 0;
+      daily[idx].net += netOf(o);
       daily[idx].bills += 1;
     }
   }
@@ -197,7 +203,7 @@ export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: nu
   const hourly = Array.from({ length: 24 }, (_, hour) => ({ hour, net: 0, bills: 0 }));
   for (const o of curPaid) {
     const h = hourly[istParts(o.created_at).hour];
-    h.net += o.subtotal_paise ?? 0;
+    h.net += netOf(o);
     h.bills += 1;
   }
 
@@ -307,7 +313,7 @@ export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: nu
   for (const o of curPaid) {
     const name = tableById.get(o.table_id) ?? "Table";
     const e = byTable.get(o.table_id) ?? { name, net: 0, bills: 0, minutes: [] };
-    e.net += o.subtotal_paise ?? 0;
+    e.net += netOf(o);
     e.bills += 1;
     if (o.closed_at) e.minutes.push(mins(o.created_at, o.closed_at));
     byTable.set(o.table_id, e);

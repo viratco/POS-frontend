@@ -6,7 +6,7 @@ import SoundToggle from "@/components/SoundToggle";
 import StaffNav from "@/components/StaffNav";
 import { chime } from "@/lib/chime";
 import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } from "@/lib/kitchenWhatsApp";
-import { billFor, formatINR, GST_RATE_BPS } from "@/lib/money";
+import { applyDiscount, billFor, type Discount, formatINR, GST_RATE_BPS } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Category, MenuItem, Order, OrderItem, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
@@ -944,12 +944,27 @@ function TableDrawer({
           waitingCount={waiting.length}
           busy={busy}
           onClose={() => setPaying(null)}
-          onPay={async (method) => {
-            const ok = await run(
-              () => supabase.rpc("close_order", { p_order_id: paying.id, p_method: method, p_gst_rate_bps: GST_RATE_BPS }),
-              `✓ ${table.name} paid by ${method === "upi" ? "UPI" : "cash"} · table is free`,
-            );
-            return ok;
+          onPay={async (method, discount) => {
+            setBusy(true);
+            setError(null);
+            // Discount params only when there is one, so plain payments work with older databases too.
+            const { data, error } = await supabase.rpc("close_order", {
+              p_order_id: paying.id,
+              p_method: method,
+              p_gst_rate_bps: GST_RATE_BPS,
+              ...(discount
+                ? { p_discount_type: discount.type, p_discount_value: discount.value, p_discount_reason: discount.reason || null }
+                : {}),
+            });
+            setBusy(false);
+            onChanged();
+            if (error) {
+              setError(error.message === "invalid_discount" ? "That discount isn't valid." : error.message);
+              return null;
+            }
+            const total = (data as Order).total_paise ?? 0;
+            toast(total === 0 ? `✓ ${table.name} closed as complimentary` : `✓ ${table.name} paid by ${method === "upi" ? "UPI" : "cash"} · table is free`);
+            return total;
           }}
           onPrintReceipt={() => openPrint(paying.id, "receipt")}
           onDone={() => {
@@ -1084,6 +1099,16 @@ function Modal({ onClose, children, wide }: { onClose: () => void; children: Rea
   );
 }
 
+const QUICK_PERCENTS = [5, 10, 15, 20];
+const QUICK_REASONS = ["Regular guest", "Birthday", "Staff", "Complaint", "Owner's guest"];
+
+// "12.5" -> 1250 (basis points for %, paise for ₹). Returns null if not a valid number.
+function parseValue(input: string): number | null {
+  const m = input.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number((m[2] ?? "0").padEnd(2, "0"));
+}
+
 function PaymentModal({
   tableName,
   bill,
@@ -1099,18 +1124,28 @@ function PaymentModal({
   waitingCount: number;
   busy: boolean;
   onClose: () => void;
-  onPay: (method: "upi" | "cash") => Promise<boolean>;
+  onPay: (method: "upi" | "cash", discount: Discount) => Promise<number | null>;
   onPrintReceipt: () => void;
   onDone: () => void;
 }) {
-  const [paidBy, setPaidBy] = useState<"upi" | "cash" | null>(null);
-  const [paidTotal] = useState(bill.total);
+  const [paid, setPaid] = useState<{ method: "upi" | "cash"; total: number } | null>(null);
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [kind, setKind] = useState<"percent" | "amount">("percent");
+  const [input, setInput] = useState("");
+  const [reason, setReason] = useState("");
+
+  const parsed = parseValue(input);
+  const invalid =
+    input.trim() !== "" && (parsed === null || (kind === "percent" && parsed > 10000) || (kind === "amount" && parsed > bill.subtotal));
+  const discount: Discount = showDiscount && parsed && !invalid ? { type: kind, value: parsed, reason } : null;
+  const final = applyDiscount(bill.subtotal, discount, bill.rateBps);
 
   async function pay(method: "upi" | "cash") {
-    if (await onPay(method)) setPaidBy(method);
+    const total = await onPay(method, discount);
+    if (total !== null) setPaid({ method, total });
   }
 
-  if (paidBy) {
+  if (paid) {
     return (
       <Modal onClose={onDone}>
         <div className="flex flex-col items-center p-6 text-center">
@@ -1119,15 +1154,19 @@ function PaymentModal({
               <path d="M5 12.5l4.5 4.5L19 7.5" />
             </svg>
           </div>
-          <p className="mt-4 text-sm font-semibold text-stone-500">{tableName} · paid by {paidBy === "upi" ? "UPI" : "cash"}</p>
-          <div className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{formatINR(paidTotal)}</div>
+          <p className="mt-4 text-sm font-semibold text-stone-500">
+            {tableName} · {paid.total === 0 ? "complimentary" : `paid by ${paid.method === "upi" ? "UPI" : "cash"}`}
+          </p>
+          <div className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{formatINR(paid.total)}</div>
           <p className="mt-1 text-sm text-stone-500">The table is free again.</p>
-          <button
-            onClick={onPrintReceipt}
-            className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 text-lg font-bold text-white hover:bg-stone-800"
-          >
-            🖨 Print receipt
-          </button>
+          {paid.total > 0 && (
+            <button
+              onClick={onPrintReceipt}
+              className="mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 text-lg font-bold text-white hover:bg-stone-800"
+            >
+              🖨 Print receipt
+            </button>
+          )}
           <button onClick={onDone} className="mt-3 h-12 w-full rounded-xl font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50">
             Done
           </button>
@@ -1138,33 +1177,142 @@ function PaymentModal({
 
   return (
     <Modal onClose={onClose}>
-      <div className="p-6">
+      <div className="overflow-y-auto p-6">
         <p className="text-sm font-semibold text-stone-500">Take payment · {tableName}</p>
-        <div className="mt-1 text-5xl font-bold tracking-tight tabular-nums">{formatINR(bill.total)}</div>
-        <p className="mt-1 text-sm text-stone-500">
-          {formatINR(bill.subtotal)} + {formatINR(bill.gst)} GST
-        </p>
+        <div className="mt-1 flex items-baseline gap-3">
+          <span className="text-5xl font-bold tracking-tight tabular-nums">{formatINR(final.total)}</span>
+          {final.discount > 0 && <span className="text-lg text-stone-400 line-through tabular-nums">{formatINR(bill.total)}</span>}
+        </div>
+
+        {/* breakdown */}
+        <div className="mt-3 space-y-0.5 rounded-xl bg-stone-50 px-4 py-3 text-sm">
+          <Row label="Items" value={formatINR(final.subtotal)} />
+          {final.discount > 0 && (
+            <div className="flex justify-between py-0.5 font-semibold text-emerald-700">
+              <span>
+                Discount{discount?.type === "percent" ? ` (${(discount.value / 100).toString()}%)` : ""}
+              </span>
+              <span className="tabular-nums">− {formatINR(final.discount)}</span>
+            </div>
+          )}
+          <Row label={`GST (${final.rateBps / 100}%)`} value={formatINR(final.gst)} />
+        </div>
+
+        {/* discount */}
+        {!showDiscount ? (
+          <button
+            onClick={() => setShowDiscount(true)}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-stone-300 py-3 text-sm font-semibold text-stone-600 hover:border-stone-400 hover:bg-stone-50"
+          >
+            🏷️ Add discount
+          </button>
+        ) : (
+          <div className="mt-3 rounded-2xl p-4 ring-1 ring-emerald-200 bg-emerald-50/50">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-emerald-800">Discount</span>
+              <button
+                onClick={() => {
+                  setShowDiscount(false);
+                  setInput("");
+                  setReason("");
+                }}
+                className="text-xs font-semibold text-stone-500 hover:text-red-600"
+              >
+                Remove
+              </button>
+            </div>
+
+            <div className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-1 ring-stone-200">
+              {(["percent", "amount"] as const).map((k) => (
+                <button
+                  key={k}
+                  onClick={() => {
+                    setKind(k);
+                    setInput("");
+                  }}
+                  className={`rounded-lg py-2 text-sm font-bold ${kind === k ? "bg-stone-900 text-white" : "text-stone-500"}`}
+                >
+                  {k === "percent" ? "% off" : "₹ off"}
+                </button>
+              ))}
+            </div>
+
+            {kind === "percent" && (
+              <div className="mt-2 grid grid-cols-4 gap-1.5">
+                {QUICK_PERCENTS.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setInput(String(p))}
+                    className={`rounded-lg py-2 text-sm font-bold ring-1 ${
+                      input === String(p) ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-stone-700 ring-stone-200"
+                    }`}
+                  >
+                    {p}%
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-2 flex items-center rounded-xl bg-white ring-1 ring-stone-200 focus-within:ring-2 focus-within:ring-emerald-500">
+              {kind === "amount" && <span className="pl-3 text-stone-400">₹</span>}
+              <input
+                inputMode="decimal"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={kind === "percent" ? "Other %, e.g. 12.5" : "Amount, e.g. 100"}
+                className="h-11 w-full bg-transparent px-3 text-[15px] outline-none"
+              />
+              {kind === "percent" && <span className="pr-3 text-stone-400">%</span>}
+            </div>
+            {invalid && (
+              <p className="mt-1 text-xs font-medium text-red-600">
+                {kind === "percent" ? "Enter a percentage up to 100." : `Enter an amount up to ${formatINR(bill.subtotal)}.`}
+              </p>
+            )}
+
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              maxLength={60}
+              placeholder="Reason (optional)"
+              className="mt-2 h-10 w-full rounded-xl bg-white px-3 text-sm ring-1 ring-stone-200 outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {QUICK_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setReason(r)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${reason === r ? "bg-stone-900 text-white" : "bg-white text-stone-600 ring-1 ring-stone-200"}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {waitingCount > 0 && (
           <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-700 ring-1 ring-rose-200">
             {waitingCount} item{waitingCount > 1 ? "s" : ""} still waiting for your OK will be dropped and not billed.
           </p>
         )}
-        <p className="mt-6 text-sm font-semibold text-stone-700">How did they pay?</p>
+
+        <p className="mt-5 text-sm font-semibold text-stone-700">{final.total === 0 ? "Close as complimentary:" : "How did they pay?"}</p>
         <div className="mt-2 grid grid-cols-2 gap-3">
           <button
-            disabled={busy}
+            disabled={busy || invalid}
             onClick={() => pay("upi")}
-            className="flex h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
+            className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
           >
-            <span className="text-2xl">📱</span>
+            <span className="text-xl">📱</span>
             <span className="text-lg font-bold">UPI</span>
           </button>
           <button
-            disabled={busy}
+            disabled={busy || invalid}
             onClick={() => pay("cash")}
-            className="flex h-24 flex-col items-center justify-center gap-1 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+            className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
           >
-            <span className="text-2xl">💵</span>
+            <span className="text-xl">💵</span>
             <span className="text-lg font-bold">Cash</span>
           </button>
         </div>

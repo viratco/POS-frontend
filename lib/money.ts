@@ -34,3 +34,16 @@ export function gstSplit(gstPaise: number) {
 export function amount(paise: number) {
   return (paise / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+export type Discount = { type: "percent" | "amount"; value: number; reason: string } | null;
+
+// Mirrors close_order(): discount comes off the subtotal, GST is charged on what's left.
+// percent value is in basis points (1000 = 10%), amount value is in paise.
+export function applyDiscount(subtotalPaise: number, discount: Discount, rateBps = GST_RATE_BPS) {
+  let off = 0;
+  if (discount?.type === "percent") off = Math.floor((subtotalPaise * Math.min(10000, Math.max(0, discount.value)) + 5000) / 10000);
+  if (discount?.type === "amount") off = Math.min(Math.max(0, discount.value), subtotalPaise);
+  const taxable = subtotalPaise - off;
+  const gst = gstPaise(taxable, rateBps);
+  return { subtotal: subtotalPaise, discount: off, taxable, gst, total: taxable + gst, rateBps };
+}

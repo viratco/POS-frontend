@@ -10,6 +10,8 @@ type BillRow = {
   invoice_no: string | null;
   closed_at: string;
   total_paise: number;
+  discount_paise?: number | null;
+  discount_reason?: string | null;
   tables: { name: string } | null;
   payments: { method: "upi" | "cash"; amount_paise: number }[];
 };
@@ -41,7 +43,7 @@ export default function BillsList() {
     end.setDate(end.getDate() + 1);
     const { data, error } = await supabaseBrowser()
       .from("orders")
-      .select("id, invoice_no, closed_at, total_paise, tables(name), payments(method, amount_paise)")
+      .select("*, tables(name), payments(method, amount_paise)")
       .eq("status", "paid")
       .gte("closed_at", start.toISOString())
       .lt("closed_at", end.toISOString())
@@ -113,7 +115,12 @@ export default function BillsList() {
                     <div className="text-sm text-stone-500">
                       {r.tables?.name ?? "—"} ·{" "}
                       {new Date(r.closed_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} ·{" "}
-                      {r.payments.map((p) => (p.method === "upi" ? "UPI" : "Cash")).join(" + ") || "—"}
+                      {r.payments.map((p) => (p.method === "upi" ? "UPI" : "Cash")).join(" + ") || "Complimentary"}
+                      {(r.discount_paise ?? 0) > 0 && (
+                        <span className="ml-1 font-semibold text-emerald-700">
+                          · {formatINR(r.discount_paise!)} off{r.discount_reason ? ` (${r.discount_reason})` : ""}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-lg font-bold tabular-nums">{formatINR(r.total_paise)}</div>

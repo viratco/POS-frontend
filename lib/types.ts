@@ -29,6 +29,8 @@ export type Order = {
   created_at: string;
   closed_at: string | null;
   invoice_no?: string | null;
+  discount_paise?: number | null;
+  discount_reason?: string | null;
   subtotal_paise?: number | null;
   gst_rate_bps?: number | null;
   gst_paise?: number | null;

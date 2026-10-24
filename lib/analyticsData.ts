@@ -31,7 +31,7 @@ export async function loadAnalyticsInput(supabase: SupabaseClient, sinceMs: numb
     all<AOrder>(() =>
       supabase
         .from("orders")
-        .select("id, table_id, status, created_at, closed_at, subtotal_paise, total_paise")
+        .select("id, table_id, status, created_at, closed_at, subtotal_paise, total_paise, gst_paise")
         .gte("created_at", since)
         .order("created_at"),
     ),
