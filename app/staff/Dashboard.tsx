@@ -8,7 +8,8 @@ import { chime } from "@/lib/chime";
 import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } from "@/lib/kitchenWhatsApp";
 import { applyDiscount, billFor, type Discount, formatINR, GST_RATE_BPS } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
-import type { Category, MenuItem, Order, OrderItem, Table } from "@/lib/types";
+import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
+import type { Category, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
 import { acceptOrder, staffAddItems } from "./actions";
@@ -315,6 +316,7 @@ export default function Dashboard() {
                         <li key={i.id} className="flex items-start justify-between text-[14px] leading-snug">
                           <div>
                             <span className="font-bold text-[#2a2119]">{i.qty}×</span> {i.name_snapshot}
+                            {i.options && i.options.length > 0 && <span className="block pl-6 text-sm text-stone-500">{optionsLabel(i.options)}</span>}
                             {i.note && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">{i.note}</span>}
                           </div>
                           <span className="text-xs font-semibold text-stone-500 tabular-nums">
@@ -1039,6 +1041,7 @@ function ItemLine({
       <div className="min-w-0 flex-1">
         <div className={`text-[15px] leading-snug ${item.status === "void" ? "line-through" : ""}`}>
           <span className="font-bold">{item.qty}×</span> {item.name_snapshot}
+          {item.options && item.options.length > 0 && <span className="block text-sm text-stone-500">{optionsLabel(item.options)}</span>}
         </div>
         {item.note && <div className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">{item.note}</div>}
         {meta && <div className="mt-0.5 text-xs text-stone-400">{meta}</div>}
@@ -1334,7 +1337,8 @@ function PaymentModal({
   );
 }
 
-type Pick = { qty: number; note: string };
+// One line per dish + chosen options.
+type Pick = { itemId: string; qty: number; note: string; options: PickedOption[] };
 
 function AddItemsModal({
   tableId,
@@ -1355,6 +1359,7 @@ function AddItemsModal({
   const [cat, setCat] = useState<string>("all");
   const [query, setQuery] = useState("");
   const [picks, setPicks] = useState<Record<string, Pick>>({});
+  const [choosing, setChoosing] = useState<string | null>(null); // item id whose options are open
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1364,22 +1369,27 @@ function AddItemsModal({
       supabase.from("menu_items").select("*").eq("is_available", true).order("sort_order"),
     ]).then(([c, m]) => {
       setCategories((c.data ?? []) as Category[]);
-      setMenu((m.data ?? []) as MenuItem[]);
+      setMenu(((m.data ?? []) as MenuItem[]).map((i) => ({ ...i, options: Array.isArray(i.options) ? i.options : [] })));
     });
   }, [supabase]);
 
+  const byId = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
   const q = query.trim().toLowerCase();
   const shown = menu.filter((m) => (cat === "all" || m.category_id === cat) && (!q || m.name.toLowerCase().includes(q)));
   const lines = Object.entries(picks).filter(([, p]) => p.qty > 0);
   const count = lines.reduce((n, [, p]) => n + p.qty, 0);
-  const total = lines.reduce((s, [id, p]) => s + (menu.find((m) => m.id === id)?.price_paise ?? 0) * p.qty, 0);
+  const unit = (p: Pick) => {
+    const m = byId.get(p.itemId);
+    return m ? m.price_paise + extraPrice(m.options, p.options) : 0;
+  };
+  const total = lines.reduce((s, [, p]) => s + unit(p) * p.qty, 0);
 
-  function bump(id: string, d: number) {
+  function bump(key: string, d: number, itemId = key, options: PickedOption[] = []) {
     setPicks((p) => {
-      const qty = Math.max(0, Math.min(50, (p[id]?.qty ?? 0) + d));
+      const qty = Math.max(0, Math.min(50, (p[key]?.qty ?? 0) + d));
       const next = { ...p };
-      if (qty === 0) delete next[id];
-      else next[id] = { qty, note: p[id]?.note ?? "" };
+      if (qty === 0) delete next[key];
+      else next[key] = { itemId, qty, note: p[key]?.note ?? "", options: p[key]?.options ?? options };
       return next;
     });
   }
@@ -1389,7 +1399,7 @@ function AddItemsModal({
       openWhatsApp(
         kitchenTicket(
           tableName,
-          lines.map(([id, p]) => ({ qty: p.qty, name_snapshot: menu.find((m) => m.id === id)?.name ?? "", note: p.note.trim() || null })),
+          lines.map(([, p]) => ({ qty: p.qty, name_snapshot: byId.get(p.itemId)?.name ?? "", note: p.note.trim() || null, options: p.options })),
           "staff",
         ),
       );
@@ -1398,10 +1408,15 @@ function AddItemsModal({
     setError(null);
     const res = await staffAddItems(
       tableId,
-      lines.map(([id, p]) => ({ menu_item_id: id, qty: p.qty, note: p.note.trim() || null })),
+      lines.map(([, p]) => ({
+        menu_item_id: p.itemId,
+        qty: p.qty,
+        note: p.note.trim() || null,
+        options: p.options.map(({ group, name }) => ({ group, name })),
+      })),
     );
     setBusy(false);
-    if (!res.ok) setError(res.error);
+    if (!res.ok) setError(res.error === "invalid_options" ? "Pick the options again for one of the dishes." : res.error);
     else onAdded(count);
   }
 
@@ -1436,40 +1451,64 @@ function AddItemsModal({
 
       <ul className="flex-1 divide-y divide-stone-100 overflow-y-auto px-5">
         {shown.map((m) => {
-          const qty = picks[m.id]?.qty ?? 0;
+          const hasOptions = m.options.length > 0;
+          const myLines = lines.filter(([, p]) => p.itemId === m.id);
+          const plainQty = picks[m.id]?.qty ?? 0;
           return (
             <li key={m.id} className="py-2.5">
               <div className="flex items-center gap-3">
                 <DietMark diet={m.diet ?? "veg"} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{m.name}</div>
-                  <div className="text-sm text-stone-500 tabular-nums">{formatINR(m.price_paise)}</div>
+                  <div className="text-sm text-stone-500 tabular-nums">
+                    {formatINR(m.price_paise)}
+                    {hasOptions && " · has options"}
+                  </div>
                 </div>
-                {qty === 0 ? (
+                {hasOptions ? (
+                  <button
+                    onClick={() => setChoosing(choosing === m.id ? null : m.id)}
+                    className="h-10 rounded-xl px-4 text-sm font-bold text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50"
+                  >
+                    {choosing === m.id ? "Close" : "Add…"}
+                  </button>
+                ) : plainQty === 0 ? (
                   <button onClick={() => bump(m.id, 1)} className="h-10 rounded-xl px-4 text-sm font-bold text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50">
                     Add
                   </button>
                 ) : (
-                  <div className="flex h-10 items-center rounded-xl bg-stone-900 text-white">
-                    <button onClick={() => bump(m.id, -1)} className="h-full w-10 text-lg" aria-label="Less">
-                      −
-                    </button>
-                    <span className="w-6 text-center font-bold tabular-nums">{qty}</span>
-                    <button onClick={() => bump(m.id, 1)} className="h-full w-10 text-lg" aria-label="More">
-                      +
-                    </button>
-                  </div>
+                  <QtyPill qty={plainQty} onLess={() => bump(m.id, -1)} onMore={() => bump(m.id, 1)} />
                 )}
               </div>
-              {qty > 0 && (
-                <input
-                  value={picks[m.id].note}
-                  onChange={(e) => setPicks((p) => ({ ...p, [m.id]: { ...p[m.id], note: e.target.value } }))}
-                  maxLength={200}
-                  placeholder="Note for kitchen (optional)"
-                  className="mt-2 ml-7 h-9 w-[calc(100%-1.75rem)] rounded-lg bg-amber-50 px-3 text-sm ring-1 ring-amber-200 outline-none placeholder:text-amber-700/50 focus:ring-amber-400"
+
+              {hasOptions && choosing === m.id && (
+                <StaffOptionPicker
+                  item={m}
+                  onAdd={(chosen) => {
+                    bump(lineKey(m.id, chosen), 1, m.id, chosen);
+                    setChoosing(null);
+                  }}
                 />
               )}
+
+              {myLines.map(([key, p]) => (
+                <div key={key} className="mt-2 ml-7">
+                  {hasOptions && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-stone-50 px-3 py-1.5">
+                      <span className="text-sm font-medium">{optionsLabel(p.options)}</span>
+                      <span className="text-sm text-stone-500 tabular-nums">{formatINR(unit(p))}</span>
+                      <QtyPill qty={p.qty} onLess={() => bump(key, -1)} onMore={() => bump(key, 1)} small />
+                    </div>
+                  )}
+                  <input
+                    value={p.note}
+                    onChange={(e) => setPicks((all) => ({ ...all, [key]: { ...all[key], note: e.target.value } }))}
+                    maxLength={200}
+                    placeholder="Note for kitchen (optional)"
+                    className="mt-1.5 h-9 w-full rounded-lg bg-amber-50 px-3 text-sm ring-1 ring-amber-200 outline-none placeholder:text-amber-700/50 focus:ring-amber-400"
+                  />
+                </div>
+              ))}
             </li>
           );
         })}
@@ -1488,6 +1527,69 @@ function AddItemsModal({
         </button>
       </div>
     </Modal>
+  );
+}
+
+function QtyPill({ qty, onLess, onMore, small }: { qty: number; onLess: () => void; onMore: () => void; small?: boolean }) {
+  return (
+    <div className={`flex items-center rounded-xl bg-stone-900 text-white ${small ? "h-8" : "h-10"}`}>
+      <button onClick={onLess} className={`h-full text-lg ${small ? "w-8" : "w-10"}`} aria-label="Less">
+        −
+      </button>
+      <span className="w-6 text-center font-bold tabular-nums">{qty}</span>
+      <button onClick={onMore} className={`h-full text-lg ${small ? "w-8" : "w-10"}`} aria-label="More">
+        +
+      </button>
+    </div>
+  );
+}
+
+function StaffOptionPicker({ item, onAdd }: { item: MenuItem; onAdd: (picks: PickedOption[]) => void }) {
+  const [chosen, setChosen] = useState<PickedOption[]>(() => defaultPicks(item.options));
+  const missing = missingGroup(item.options, chosen);
+
+  function toggle(g: OptionGroup, name: string) {
+    setChosen((cur) => {
+      const has = cur.some((p) => p.group === g.name && p.name === name);
+      if (g.max === 1) return [...cur.filter((p) => p.group !== g.name), ...(has && g.min === 0 ? [] : [{ group: g.name, name }])];
+      if (has) return cur.filter((p) => !(p.group === g.name && p.name === name));
+      if (cur.filter((p) => p.group === g.name).length >= g.max) return cur;
+      return [...cur, { group: g.name, name }];
+    });
+  }
+
+  return (
+    <div className="mt-2 ml-7 rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200">
+      {item.options.map((g) => (
+        <div key={g.name} className="mb-2">
+          <div className="text-xs font-bold tracking-wide text-stone-500 uppercase">
+            {g.name} {g.min > 0 ? "· required" : ""} {g.max > 1 ? `· up to ${g.max}` : ""}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            {g.choices.map((c) => {
+              const on = chosen.some((p) => p.group === g.name && p.name === c.name);
+              return (
+                <button
+                  key={c.name}
+                  onClick={() => toggle(g, c.name)}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 ${on ? "bg-stone-900 text-white ring-stone-900" : "bg-white text-stone-700 ring-stone-300"}`}
+                >
+                  {c.name}
+                  {c.price > 0 && <span className={on ? "text-white/70" : "text-stone-400"}> +{formatINR(c.price)}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <button
+        disabled={!!missing}
+        onClick={() => onAdd(chosen)}
+        className="mt-1 h-10 w-full rounded-lg bg-stone-900 text-sm font-bold text-white disabled:opacity-40"
+      >
+        {missing ? `Choose ${missing.name}` : `Add · ${formatINR(item.price_paise + extraPrice(item.options, chosen))}`}
+      </button>
+    </div>
   );
 }
 

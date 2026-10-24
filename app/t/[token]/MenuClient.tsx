@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { DietMark } from "@/components/MenuMarks";
 import { formatINR } from "@/lib/money";
-import type { Category, MenuItem } from "@/lib/types";
+import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
+import type { Category, MenuItem, OptionGroup, PickedOption } from "@/lib/types";
 import { placeOrder, type PlacedItem } from "./actions";
 
-type Cart = Record<string, { qty: number; note: string }>;
+// One line per dish + chosen options (e.g. "Wings · Full · Honey Butter" and "Wings · Half" are separate lines).
+type Line = { itemId: string; qty: number; note: string; options: PickedOption[] };
+type Cart = Record<string, Line>;
 
 // The landing grid shows real categories plus a virtual "Best Seller" tile.
 const BEST_SELLER = "__best__";
@@ -36,6 +39,7 @@ export default function MenuClient({
   const [picking, setPicking] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [placed, setPlaced] = useState<PlacedItem[] | null>(null);
+  const [customizing, setCustomizing] = useState<MenuItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -75,16 +79,31 @@ export default function MenuClient({
 
   const cartLines = Object.entries(cart).filter(([, l]) => l.qty > 0);
   const count = cartLines.reduce((n, [, l]) => n + l.qty, 0);
-  const total = cartLines.reduce((s, [id, l]) => s + (byId.get(id)?.price_paise ?? 0) * l.qty, 0);
-  const qtyOf = (id: string) => cart[id]?.qty ?? 0;
+  const unitPrice = (l: Line) => {
+    const item = byId.get(l.itemId);
+    return item ? item.price_paise + extraPrice(item.options, l.options) : 0;
+  };
+  const total = cartLines.reduce((s, [, l]) => s + unitPrice(l) * l.qty, 0);
+  // All lines of a dish, whatever options were picked.
+  const qtyOf = (itemId: string) => cartLines.filter(([, l]) => l.itemId === itemId).reduce((n, [, l]) => n + l.qty, 0);
 
-  function setQty(id: string, qty: number) {
+  // key is the item id for dishes without options, or a cart line key.
+  function setQty(key: string, qty: number) {
     setCart((c) => {
       const next = { ...c };
-      if (qty <= 0) delete next[id];
-      else next[id] = { qty: Math.min(qty, 50), note: c[id]?.note ?? "" };
+      if (qty <= 0) delete next[key];
+      else next[key] = { itemId: c[key]?.itemId ?? key, qty: Math.min(qty, 50), note: c[key]?.note ?? "", options: c[key]?.options ?? [] };
       return next;
     });
+  }
+
+  function addWithOptions(item: MenuItem, picks: PickedOption[]) {
+    const key = lineKey(item.id, picks);
+    setCart((c) => ({
+      ...c,
+      [key]: { itemId: item.id, qty: Math.min((c[key]?.qty ?? 0) + 1, 50), note: c[key]?.note ?? "", options: picks },
+    }));
+    setCustomizing(null);
   }
 
   function setNote(id: string, note: string) {
@@ -115,7 +134,12 @@ export default function MenuClient({
     startTransition(async () => {
       const res = await placeOrder(
         token,
-        cartLines.map(([id, l]) => ({ menu_item_id: id, qty: l.qty, note: l.note.trim() || null })),
+        cartLines.map(([, l]) => ({
+          menu_item_id: l.itemId,
+          qty: l.qty,
+          note: l.note.trim() || null,
+          options: l.options.map(({ group, name }) => ({ group, name })),
+        })),
       );
       if (!res.ok) {
         setError(res.error);
@@ -185,7 +209,7 @@ export default function MenuClient({
           <ul className="px-5">
             {query.trim() && searchResults.length === 0 && <p className={`pt-10 text-center ${GREY}`}>No dishes found</p>}
             {searchResults.map((item) => (
-              <ItemRow key={item.id} item={item} qty={qtyOf(item.id)} onQty={(q) => setQty(item.id, q)} />
+              <ItemRow key={item.id} item={item} qty={qtyOf(item.id)} onQty={(q) => setQty(item.id, q)} onCustomize={() => setCustomizing(item)} />
             ))}
           </ul>
         ) : !current ? (
@@ -209,7 +233,7 @@ export default function MenuClient({
             ) : (
               <ul>
                 {listItems.map((item) => (
-                  <ItemRow key={item.id} item={item} qty={qtyOf(item.id)} onQty={(q) => setQty(item.id, q)} />
+                  <ItemRow key={item.id} item={item} qty={qtyOf(item.id)} onQty={(q) => setQty(item.id, q)} onCustomize={() => setCustomizing(item)} />
                 ))}
               </ul>
             )}
@@ -236,6 +260,10 @@ export default function MenuClient({
             ))}
           </ul>
         </Sheet>
+      )}
+
+      {customizing && (
+        <OptionsSheet item={customizing} onClose={() => setCustomizing(null)} onAdd={(picks) => addWithOptions(customizing, picks)} />
       )}
 
       {count > 0 && !reviewing && (
@@ -266,7 +294,8 @@ export default function MenuClient({
 
           <ul className="mt-3 divide-y divide-[#edf2f7]">
             {cartLines.map(([id, line]) => {
-              const item = byId.get(id)!;
+              const item = byId.get(line.itemId);
+              if (!item) return null;
               return (
                 <li key={id} className="py-4">
                   <div className="flex items-start justify-between gap-3">
@@ -274,7 +303,8 @@ export default function MenuClient({
                       <DietMark diet={item.diet} className="mt-1" />
                       <div>
                         <div className="font-semibold">{item.name}</div>
-                        <div className={`text-sm tabular-nums ${GREY}`}>{formatINR(item.price_paise * line.qty)}</div>
+                        {line.options.length > 0 && <div className={`text-sm ${GREY}`}>{optionsLabel(line.options)}</div>}
+                        <div className={`text-sm tabular-nums ${GREY}`}>{formatINR(unitPrice(line) * line.qty)}</div>
                       </div>
                     </div>
                     <div className="w-[96px]">
@@ -553,8 +583,9 @@ function CategoryTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   );
 }
 
-function ItemRow({ item, qty, onQty }: { item: MenuItem; qty: number; onQty: (q: number) => void }) {
+function ItemRow({ item, qty, onQty, onCustomize }: { item: MenuItem; qty: number; onQty: (q: number) => void; onCustomize: () => void }) {
   const soldOut = !item.is_available;
+  const customizable = item.options.length > 0;
   return (
     <li className={`border-b border-dashed border-[#cbd5e0] px-5 py-7 last:border-b-0 ${soldOut ? "opacity-50" : ""}`}>
       <div className="flex gap-5">
@@ -577,6 +608,13 @@ function ItemRow({ item, qty, onQty }: { item: MenuItem; qty: number; onQty: (q:
                 <div className={`flex h-11 items-center justify-center rounded-lg bg-white text-sm font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.12)] ${GREY}`}>
                   Sold out
                 </div>
+              ) : customizable ? (
+                <button
+                  onClick={onCustomize}
+                  className="h-11 w-full rounded-lg border border-[#edf2f7] bg-white text-[18px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition active:scale-95"
+                >
+                  {qty > 0 ? `ADD · ${qty}` : "ADD"}
+                </button>
               ) : qty === 0 ? (
                 <button
                   onClick={() => onQty(1)}
@@ -587,12 +625,90 @@ function ItemRow({ item, qty, onQty }: { item: MenuItem; qty: number; onQty: (q:
               ) : (
                 <Stepper qty={qty} onQty={onQty} />
               )}
+              {customizable && !soldOut && <div className={`mt-1 text-center text-[12px] ${GREY}`}>customizable</div>}
             </div>
           </div>
         </div>
       </div>
       {item.description && <p className={`mt-4 text-[16px] leading-relaxed ${GREY}`}>{item.description}</p>}
     </li>
+  );
+}
+
+function OptionsSheet({ item, onClose, onAdd }: { item: MenuItem; onClose: () => void; onAdd: (picks: PickedOption[]) => void }) {
+  const [picks, setPicks] = useState<PickedOption[]>(() => defaultPicks(item.options));
+  const missing = missingGroup(item.options, picks);
+  const price = item.price_paise + extraPrice(item.options, picks);
+
+  function toggle(g: OptionGroup, name: string) {
+    setPicks((cur) => {
+      const has = cur.some((p) => p.group === g.name && p.name === name);
+      if (g.max === 1) return [...cur.filter((p) => p.group !== g.name), ...(has && g.min === 0 ? [] : [{ group: g.name, name }])];
+      if (has) return cur.filter((p) => !(p.group === g.name && p.name === name));
+      if (cur.filter((p) => p.group === g.name).length >= g.max) return cur;
+      return [...cur, { group: g.name, name }];
+    });
+  }
+
+  return (
+    <Sheet onClose={onClose}>
+      <div className="-mx-5 -mt-3 flex items-center justify-between border-b border-[#edf2f7] px-5 pt-1 pb-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <DietMark diet={item.diet} />
+          <h2 className="truncate text-xl font-bold">{item.name}</h2>
+        </div>
+        <button onClick={onClose} aria-label="Close" className="p-1 text-2xl leading-none">
+          ×
+        </button>
+      </div>
+
+      {item.options.map((g) => {
+        const n = picks.filter((p) => p.group === g.name).length;
+        const single = g.max === 1;
+        return (
+          <section key={g.name} className="-mx-5 mt-4">
+            <div className="flex items-baseline justify-between bg-[#f7fafc] px-5 py-3">
+              <span className="text-[17px] font-bold">{g.name}</span>
+              <span className={`text-sm ${GREY}`}>
+                {g.min > 0 ? "Required · " : ""}
+                {n}/{g.max} selected
+              </span>
+            </div>
+            <ul className="px-5">
+              {g.choices.map((c) => {
+                const on = picks.some((p) => p.group === g.name && p.name === c.name);
+                return (
+                  <li key={c.name}>
+                    <button onClick={() => toggle(g, c.name)} className="flex w-full items-center justify-between py-3.5 text-left">
+                      <span className="text-[17px]">{c.name}</span>
+                      <span className="flex items-center gap-3">
+                        {c.price > 0 && <span className={`tabular-nums ${GREY}`}>+ {formatINR(c.price)}</span>}
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center border-2 ${single ? "rounded-full" : "rounded-md"} ${
+                            on ? "border-black" : "border-[#cbd5e0]"
+                          }`}
+                        >
+                          {on && <span className={`h-3 w-3 bg-black ${single ? "rounded-full" : "rounded-sm"}`} />}
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+
+      <button
+        disabled={!!missing}
+        onClick={() => onAdd(picks)}
+        className="mt-5 flex h-14 w-full items-center justify-between rounded-2xl bg-black px-6 text-lg font-bold text-white disabled:opacity-40"
+      >
+        <span className="tabular-nums">{formatINR(price)}</span>
+        <span>{missing ? `Choose ${missing.name}` : "ADD TO CART"}</span>
+      </button>
+    </Sheet>
   );
 }
 
@@ -690,6 +806,7 @@ function Confirmation({ tableName, placed, onAgain }: { tableName: string; place
                   <div className="font-medium">
                     {i.qty} × {i.name_snapshot}
                   </div>
+                  {i.options && i.options.length > 0 && <div className={`text-sm ${GREY}`}>{optionsLabel(i.options)}</div>}
                   {i.note && <div className={`mt-0.5 text-sm ${GREY}`}>“{i.note}”</div>}
                 </div>
                 <div className="tabular-nums">{formatINR(i.price_paise_snapshot * i.qty)}</div>

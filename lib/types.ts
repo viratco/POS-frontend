@@ -16,7 +16,12 @@ export type MenuItem = {
   moods: Mood[];
   is_combo: boolean;
   subcategory: string | null;
+  options: OptionGroup[];
 };
+// Dish options, e.g. { name: "Choice", min: 1, max: 1, choices: [{ name: "Chicken", price: 5000 }] }.
+export type OptionChoice = { name: string; price: number }; // price in paise, added to the dish price
+export type OptionGroup = { name: string; min: number; max: number; choices: OptionChoice[] };
+export type PickedOption = { group: string; name: string; price?: number };
 export type Diet = "veg" | "egg" | "nonveg";
 export type Mood = "meal" | "share" | "drink";
 export type OrderStatus = "open" | "paid" | "cancelled";
@@ -49,5 +54,6 @@ export type OrderItem = {
   created_at: string;
   accepted_at: string | null;
   ready_at: string | null;
+  options?: PickedOption[] | null;
 };
-export type CartLine = { menu_item_id: string; qty: number; note: string | null };
+export type CartLine = { menu_item_id: string; qty: number; note: string | null; options?: { group: string; name: string }[] };

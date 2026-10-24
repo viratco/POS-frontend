@@ -4,11 +4,16 @@
 // WhatsApp can't pre-select a group from a link, so staff pick the group and tap Send.
 // (The WhatsApp Business API can't post to normal groups, so this is the practical route.)
 
-type TicketItem = { qty: number; name_snapshot: string; note: string | null };
+type TicketItem = { qty: number; name_snapshot: string; note: string | null; options?: { name: string }[] | null };
 
 export function kitchenTicket(tableName: string, items: TicketItem[], source: "qr" | "staff" = "qr") {
   const time = new Date().toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
-  const lines = items.map((i) => `▪️ *${i.qty} × ${i.name_snapshot}*${i.note ? `\n     ↳ _${i.note}_` : ""}`);
+  const lines = items.map(
+    (i) =>
+      `▪️ *${i.qty} × ${i.name_snapshot}*` +
+      (i.options?.length ? `\n     ➜ ${i.options.map((o) => o.name).join(" · ")}` : "") +
+      (i.note ? `\n     ↳ _${i.note}_` : ""),
+  );
   const totalQty = items.reduce((n, i) => n + i.qty, 0);
   return [
     `🍳 *NEW ORDER · ${tableName.toUpperCase()}*`,

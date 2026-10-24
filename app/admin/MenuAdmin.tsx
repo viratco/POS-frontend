@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
 import { formatINR } from "@/lib/money";
+import { optionsToText, textToOptions } from "@/lib/options";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { DietMark } from "@/components/MenuMarks";
 import type { Category, Diet, MenuItem, Mood } from "@/lib/types";
 
 const MOOD_LABELS: Record<Mood, string> = { meal: "🍜 Full meal", share: "🍗 Share & snack", drink: "🧋 Drink" };
 
-type Draft = Omit<MenuItem, "id" | "price_paise"> & { id?: string; price: string };
+type Draft = Omit<MenuItem, "id" | "price_paise"> & { id?: string; price: string; optionsText: string };
 
 // "120" or "120.50" -> paise, without going through floats.
 function rupeesToPaise(input: string): number | null {
@@ -59,6 +60,11 @@ export default function MenuAdmin() {
       setError("Price must be a number like 120 or 120.50");
       return;
     }
+    const parsed = textToOptions(draft.optionsText);
+    if (parsed.error) {
+      setError(`Options: ${parsed.error}`);
+      return;
+    }
     const row = {
       category_id: draft.category_id,
       name: draft.name.trim(),
@@ -74,6 +80,8 @@ export default function MenuAdmin() {
       moods: draft.moods,
       is_combo: draft.is_combo,
       subcategory: draft.subcategory?.trim() || null,
+      // Only sent when used, so editing still works on a database without the options column.
+      ...(parsed.groups.length || draft.options?.length ? { options: parsed.groups } : {}),
     };
     const { error } = draft.id
       ? await supabase.from("menu_items").update(row).eq("id", draft.id)
@@ -122,6 +130,8 @@ export default function MenuAdmin() {
       moods: [],
       is_combo: false,
       subcategory: "",
+      options: [],
+      optionsText: "",
     });
   }
 
@@ -173,7 +183,7 @@ export default function MenuAdmin() {
                       {i.is_available ? "Available" : "Sold out"}
                     </button>
                     <button
-                      onClick={() => setDraft({ ...i, price: paiseToRupees(i.price_paise) })}
+                      onClick={() => setDraft({ ...i, price: paiseToRupees(i.price_paise), optionsText: optionsToText(i.options ?? []) })}
                       className="text-sm text-stone-500 hover:text-stone-900"
                     >
                       Edit
@@ -219,6 +229,18 @@ export default function MenuAdmin() {
                 </select>
               </Field>
             </div>
+            <Field label="Options & add-ons (optional)">
+              <textarea
+                rows={Math.max(3, draft.optionsText.split("\n").length + 1)}
+                value={draft.optionsText}
+                onChange={(e) => setDraft({ ...draft, optionsText: e.target.value })}
+                placeholder={"Choice (pick 1)\nVeg\nChicken +50\nPork +80\nAdd On (pick 0-3)\nHoney Butter +50"}
+                className="input font-mono text-sm"
+              />
+              <span className="mt-1 block text-xs text-stone-500">
+                A group line like <b>Choice (pick 1)</b> or <b>Add On (pick 0-3)</b>, then one choice per line. Add <b>+50</b> for extra ₹.
+              </span>
+            </Field>
             <Field label="Sub-category (optional, e.g. French Fries, Kimbap, Hot, Cold)">
               <input
                 list="subcategory-options"

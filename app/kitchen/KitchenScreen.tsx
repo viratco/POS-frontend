@@ -13,6 +13,7 @@ type Ticket = {
   note: string | null;
   created_at: string;
   accepted_at: string | null;
+  options?: { name: string }[] | null;
   orders: { tables: { name: string } | null } | null;
 };
 
@@ -25,7 +26,7 @@ export default function KitchenScreen() {
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("order_items")
-      .select("id, name_snapshot, qty, note, created_at, accepted_at, orders!inner(status, tables(name))")
+      .select("*, orders!inner(status, tables(name))")
       .eq("status", "pending")
       .eq("orders.status", "open")
       .order("accepted_at", { ascending: true, nullsFirst: true })
@@ -92,6 +93,9 @@ export default function KitchenScreen() {
                   <div className="mt-2 text-4xl leading-tight font-bold">
                     <span className="text-emerald-400">{t.qty}×</span> {t.name_snapshot}
                   </div>
+                  {t.options && t.options.length > 0 && (
+                    <div className="mt-1 text-2xl font-semibold text-sky-300">{t.options.map((o) => o.name).join(" · ")}</div>
+                  )}
                   {t.note && <div className="mt-3 rounded-lg bg-yellow-300 px-3 py-2 text-2xl font-bold text-black">⚠ {t.note}</div>}
                   <div className="mt-4 text-lg text-neutral-400">Tap when ready</div>
                 </button>

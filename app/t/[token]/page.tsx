@@ -48,6 +48,7 @@ function withDefaults(i: Partial<MenuItem>): MenuItem {
     moods: i.moods ?? [],
     is_combo: i.is_combo ?? false,
     subcategory: i.subcategory ?? null,
+    options: Array.isArray(i.options) ? i.options : [],
   };
 }
 

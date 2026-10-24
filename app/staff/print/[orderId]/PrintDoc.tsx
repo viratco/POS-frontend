@@ -172,7 +172,10 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
       {billed.map((i) => (
         <div key={i.id} className="mb-[1mm]">
           <div className="flex">
-            <span className="flex-1 pr-1">{i.name_snapshot}</span>
+            <span className="flex-1 pr-1">
+              {i.name_snapshot}
+              {i.options && i.options.length > 0 && <span className="block text-[0.85em]">+ {i.options.map((o) => o.name).join(", ")}</span>}
+            </span>
             <span className="w-[2.5em] text-right tabular-nums">{i.qty}</span>
             <span className="w-[5.5em] text-right tabular-nums">{amount(i.price_paise_snapshot * i.qty)}</span>
           </div>
@@ -233,6 +236,7 @@ function Kot({ data, printedAt }: { data: Loaded; printedAt: string }) {
           <div className="font-bold">
             {i.qty} × {i.name_snapshot}
           </div>
+          {i.options && i.options.length > 0 && <div className="pl-[4mm] font-bold">➜ {i.options.map((o) => o.name).join(" · ")}</div>}
           {i.note && <div className="pl-[4mm] font-semibold">** {i.note}</div>}
         </div>
       ))}
