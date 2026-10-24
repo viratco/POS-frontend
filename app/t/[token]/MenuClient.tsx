@@ -14,7 +14,10 @@ type Cart = Record<string, Line>;
 // The landing grid shows real categories plus a virtual "Best Seller" tile.
 const BEST_SELLER = "__best__";
 const NO_SUB = "More";
-type Tile = { id: string; name: string; image: string | null };
+type Tile = { id: string; name: string; image: string | null; fallback?: string | null };
+
+// The Best Seller tile isn't a real category, so its poster lives at a fixed spot in storage.
+const BEST_SELLER_POSTER = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu-photos/categories/best-seller.jpg`;
 
 const INK = "text-[#1a202c]";
 const GREY = "text-[#718096]";
@@ -48,7 +51,7 @@ export default function MenuClient({
 
   const tiles: Tile[] = [
     ...(bestSellers.length
-      ? [{ id: BEST_SELLER, name: "Best Seller", image: bestSellers.find((i) => i.image_url)?.image_url ?? null }]
+      ? [{ id: BEST_SELLER, name: "Best Seller", image: BEST_SELLER_POSTER, fallback: bestSellers.find((i) => i.image_url)?.image_url ?? null }]
       : []),
     ...categories
       .filter((c) => items.some((i) => i.category_id === c.id))
@@ -563,14 +566,21 @@ function Logo() {
 /* ───────────────────────── content ───────────────────────── */
 
 function CategoryTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
+  // If the poster can't load, fall back to a dish photo, then to lettering.
+  const [src, setSrc] = useState(tile.image);
   return (
     <button
       onClick={onClick}
       className="relative aspect-[5/6] overflow-hidden rounded-2xl bg-[#2a1a10] text-left transition active:scale-[0.97]"
     >
-      {tile.image ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={tile.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img
+          src={src}
+          alt=""
+          onError={() => setSrc(src === tile.fallback ? null : (tile.fallback ?? null))}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
       ) : (
         // No photo yet: poster-style lettering on the brand's chocolate background.
         <div className="absolute inset-x-0 top-0 px-3 pt-4 text-center font-poster text-[2.4rem] leading-[0.85] tracking-[-0.03em] text-[#e8d2b0] uppercase">
