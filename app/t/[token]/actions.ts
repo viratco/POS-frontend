@@ -20,11 +20,20 @@ const MESSAGES: Record<string, string> = {
   item_unavailable: "Something in your cart just sold out. Please review your cart.",
   invalid_cart: "Your cart is empty or too large.",
   invalid_options: "One of your dishes needs its options chosen again. Please check your cart.",
+  invalid_phone: "Please enter a valid 10-digit mobile number.",
+  invalid_name: "Please enter your name.",
   slow_down: "Lots of orders from this table just now. Please wait a minute, or ask a staff member.",
 };
 
-export async function placeOrder(token: string, lines: CartLine[]): Promise<PlaceOrderResult> {
-  const { data, error } = await supabaseAnon().rpc("place_order", { p_qr_token: token, p_items: lines });
+export type GuestDetails = { name: string; phone: string; marketing_consent: boolean };
+
+export async function placeOrder(token: string, lines: CartLine[], guest?: GuestDetails): Promise<PlaceOrderResult> {
+  const db = supabaseAnon();
+  let { data, error } = await db.rpc("place_order", { p_qr_token: token, p_items: lines, ...(guest ? { p_customer: guest } : {}) });
+  // Database not updated yet for guest details: still take the order rather than fail.
+  if (error?.code === "PGRST202" && guest) {
+    ({ data, error } = await db.rpc("place_order", { p_qr_token: token, p_items: lines }));
+  }
   if (error) {
     console.error("place_order failed:", error.message);
     return { ok: false, error: MESSAGES[error.message] ?? "Couldn't send your order. Please try again." };

@@ -57,3 +57,6 @@ export type OrderItem = {
   options?: PickedOption[] | null;
 };
 export type CartLine = { menu_item_id: string; qty: number; note: string | null; options?: { group: string; name: string }[] };
+
+// Guest details collected before a QR order (staff-only table).
+export type Guest = { order_id: string; name: string; phone: string; marketing_consent: boolean; created_at: string };

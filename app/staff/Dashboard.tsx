@@ -9,7 +9,7 @@ import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } fr
 import { applyDiscount, billFor, type Discount, formatINR, GST_RATE_BPS } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
-import type { Category, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
+import type { Category, Guest, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
 import { acceptOrder, staffAddItems } from "./actions";
@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<OrderItem[]>([]);
   const [salesToday, setSalesToday] = useState(0);
+  const [guests, setGuests] = useState<Guest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [viewMode, setViewMode] = useState<"floorplan" | "cards">("floorplan");
@@ -111,6 +112,8 @@ export default function Dashboard() {
     setTables((t.data ?? []) as Table[]);
     setOrders(openOrders);
     setItems((it.data ?? []) as OrderItem[]);
+    const g = ids.length ? await supabase.from("order_guests").select("*").in("order_id", ids).order("created_at") : { data: [] };
+    setGuests(((g.data ?? []) as Guest[]));
     setSalesToday(((p.data ?? []) as { amount_paise: number }[]).reduce((s, x) => s + x.amount_paise, 0));
   }, [supabase]);
 
@@ -139,10 +142,13 @@ export default function Dashboard() {
     return m;
   }, [items]);
 
+  const guestsByOrder = new Map<string, Guest[]>();
+  guests.forEach((g) => guestsByOrder.set(g.order_id, [...(guestsByOrder.get(g.order_id) ?? []), g]));
+
   const rows = tables.map((t) => {
     const order = openByTable.get(t.id) ?? null;
     const orderItems = order ? (itemsByOrder.get(order.id) ?? []) : undefined;
-    return { table: t, order, items: orderItems ?? [], state: stateOf(orderItems) };
+    return { table: t, order, items: orderItems ?? [], state: stateOf(orderItems), guests: order ? (guestsByOrder.get(order.id) ?? []) : [] };
   });
 
   const waitingOrders = rows
@@ -301,7 +307,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium text-rose-700">Check the guests are seated, then accept to dispatch</span>
             </div>
             <div className="mt-3.5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {waitingOrders.map(({ order, table, waiting }) => (
+              {waitingOrders.map(({ order, table, waiting, guests: who }) => (
                 <div key={order!.id} className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm ring-2 ring-rose-200/50">
                   <div>
                     <div className="flex items-baseline justify-between border-b border-rose-100 pb-2">
@@ -311,6 +317,7 @@ export default function Dashboard() {
                         {now ? ago(waiting[0].created_at, now) : ""}
                       </span>
                     </div>
+                    {who.length > 0 && <GuestLine guests={who} className="mt-2" />}
                     <ul className="mt-2.5 space-y-1.5">
                       {waiting.map((i) => (
                         <li key={i.id} className="flex items-start justify-between text-[14px] leading-snug">
@@ -452,6 +459,7 @@ export default function Dashboard() {
           order={selected.order}
           items={selected.items}
           state={selected.state}
+          guests={selected.guests}
           now={now}
           accepting={!!selected.order && accepting === selected.order.id}
           onAccept={(waiting) => selected.order && accept(selected.order.id, selected.table.name, waiting)}
@@ -538,6 +546,7 @@ function TableCard({
   order,
   items,
   state,
+  guests,
   now,
   selected,
   onClick,
@@ -546,6 +555,7 @@ function TableCard({
   order: Order | null;
   items: OrderItem[];
   state: TableState;
+  guests: Guest[];
   now: number;
   selected: boolean;
   onClick: () => void;
@@ -636,7 +646,15 @@ function TableCard({
 
             {/* Bottom Row */}
             <div className="flex items-end justify-between border-t border-[#f0e7d8] pt-2">
-              <span className="text-xs font-medium text-[#8a7b6b]">{liveCount} item{liveCount !== 1 ? "s" : ""}</span>
+              <span className="min-w-0 text-xs font-medium text-[#8a7b6b]">
+                {guests.length > 0 && (
+                  <span className="block truncate font-semibold text-[#2a2119]">
+                    👤 {guests[0].name}
+                    {guests.length > 1 ? ` +${guests.length - 1}` : ""}
+                  </span>
+                )}
+                {liveCount} item{liveCount !== 1 ? "s" : ""}
+              </span>
               <span className="text-xl font-extrabold text-[#2a2119] tabular-nums tracking-tight">
                 {formatINR(billFor(items).total)}
               </span>
@@ -670,6 +688,7 @@ function TableDrawer({
   order,
   items,
   state,
+  guests,
   now,
   accepting,
   onAccept,
@@ -682,6 +701,7 @@ function TableDrawer({
   order: Order | null;
   items: OrderItem[];
   state: TableState;
+  guests: Guest[];
   now: number;
   accepting: boolean;
   onAccept: (waiting: OrderItem[]) => void;
@@ -749,6 +769,19 @@ function TableDrawer({
               <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${STATE[state].chip}`}>{STATE[state].label}</span>
             </div>
             <p className="mt-1 text-sm text-stone-500">{order ? `Open ${now ? ago(order.created_at, now) : ""} · ${liveQty} items` : "No order yet"}</p>
+            {guests.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {guests.map((g) => (
+                  <li key={g.phone} className="flex flex-wrap items-center gap-x-2 text-sm">
+                    <span className="font-semibold text-stone-800">👤 {g.name}</span>
+                    <a href={`tel:+91${g.phone}`} className="font-medium text-emerald-700 tabular-nums hover:underline">
+                      {formatPhone(g.phone)}
+                    </a>
+                    {g.marketing_consent && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">OK to send offers</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <button onClick={onClose} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
@@ -1608,5 +1641,25 @@ function WhatsAppToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
       <span className="hidden md:inline">WhatsApp group</span>
       <span className="md:hidden">WA</span>
     </button>
+  );
+}
+
+// "9876543210" -> "98765 43210"
+function formatPhone(p: string) {
+  return p.length === 10 ? `${p.slice(0, 5)} ${p.slice(5)}` : p;
+}
+
+function GuestLine({ guests, className = "" }: { guests: Guest[]; className?: string }) {
+  return (
+    <div className={`flex flex-wrap gap-x-3 gap-y-0.5 text-[13px] ${className}`}>
+      {guests.map((g) => (
+        <span key={g.phone} className="text-stone-600">
+          👤 <span className="font-semibold text-stone-800">{g.name}</span>{" "}
+          <a href={`tel:+91${g.phone}`} className="tabular-nums text-emerald-700 hover:underline">
+            {formatPhone(g.phone)}
+          </a>
+        </span>
+      ))}
+    </div>
   );
 }

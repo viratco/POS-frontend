@@ -5,7 +5,7 @@ import { DietMark } from "@/components/MenuMarks";
 import { formatINR } from "@/lib/money";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
 import type { Category, MenuItem, OptionGroup, PickedOption } from "@/lib/types";
-import { placeOrder, type PlacedItem } from "./actions";
+import { placeOrder, type GuestDetails, type PlacedItem } from "./actions";
 
 // One line per dish + chosen options (e.g. "Wings · Full · Honey Butter" and "Wings · Half" are separate lines).
 type Line = { itemId: string; qty: number; note: string; options: PickedOption[] };
@@ -20,6 +20,15 @@ type Tile = { id: string; name: string; image: string | null; fallback?: string 
 const BEST_SELLER_POSTER = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu-photos/categories/best-seller.jpg`;
 
 const INK = "text-[#1a202c]";
+const GUEST_KEY = "sohees.guest";
+
+// "+91 98765 43210" / "098765 43210" -> "9876543210"
+function normalisePhone(input: string) {
+  let d = input.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return d;
+}
 const GREY = "text-[#718096]";
 
 export default function MenuClient({
@@ -43,6 +52,19 @@ export default function MenuClient({
   const [reviewing, setReviewing] = useState(false);
   const [placed, setPlaced] = useState<PlacedItem[] | null>(null);
   const [customizing, setCustomizing] = useState<MenuItem | null>(null);
+  // Guest details, asked once and remembered on this phone.
+  const [guest, setGuest] = useState<GuestDetails>({ name: "", phone: "", marketing_consent: false });
+  const [showGuestErrors, setShowGuestErrors] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(GUEST_KEY) ?? "null");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (saved?.name && saved?.phone) setGuest({ name: saved.name, phone: saved.phone, marketing_consent: !!saved.marketing_consent });
+    } catch {}
+  }, []);
+  const guestPhone = normalisePhone(guest.phone);
+  const guestNameOk = guest.name.trim().length > 0;
+  const guestPhoneOk = /^[6-9]\d{9}$/.test(guestPhone);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -134,6 +156,11 @@ export default function MenuClient({
 
   function submit() {
     setError(null);
+    if (!guestNameOk || !guestPhoneOk) {
+      setShowGuestErrors(true);
+      return;
+    }
+    const details: GuestDetails = { name: guest.name.trim(), phone: guestPhone, marketing_consent: guest.marketing_consent };
     startTransition(async () => {
       const res = await placeOrder(
         token,
@@ -143,11 +170,15 @@ export default function MenuClient({
           note: l.note.trim() || null,
           options: l.options.map(({ group, name }) => ({ group, name })),
         })),
+        details,
       );
       if (!res.ok) {
         setError(res.error);
         return;
       }
+      try {
+        localStorage.setItem(GUEST_KEY, JSON.stringify(details));
+      } catch {}
       setPlaced(res.items);
       setCart({});
       setReviewing(false);
@@ -331,6 +362,61 @@ export default function MenuClient({
             <span className="tabular-nums">{formatINR(total)}</span>
           </div>
           <p className={`mt-1 text-xs ${GREY}`}>Taxes are added to your final bill.</p>
+
+          <section className="mt-5 rounded-2xl bg-[#f7fafc] p-4">
+            <h3 className="font-bold">Your details</h3>
+            <p className={`text-xs ${GREY}`}>So we know who ordered and can reach you about this order.</p>
+            <label className="mt-3 block">
+              <span className="text-sm font-semibold">Name</span>
+              <input
+                value={guest.name}
+                onChange={(e) => setGuest({ ...guest, name: e.target.value })}
+                autoComplete="name"
+                maxLength={60}
+                placeholder="Your name"
+                className={`mt-1 h-12 w-full rounded-xl border bg-white px-3 text-[16px] outline-none focus:border-[#1a202c] ${
+                  showGuestErrors && !guestNameOk ? "border-red-400" : "border-[#e2e8f0]"
+                }`}
+              />
+            </label>
+            <label className="mt-3 block">
+              <span className="text-sm font-semibold">Mobile number</span>
+              <div
+                className={`mt-1 flex h-12 items-center rounded-xl border bg-white focus-within:border-[#1a202c] ${
+                  showGuestErrors && !guestPhoneOk ? "border-red-400" : "border-[#e2e8f0]"
+                }`}
+              >
+                <span className={`pl-3 pr-1 text-[16px] ${GREY}`}>+91</span>
+                <input
+                  value={guest.phone}
+                  onChange={(e) => setGuest({ ...guest, phone: e.target.value.replace(/[^\d+\s-]/g, "").slice(0, 16) })}
+                  type="tel"
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="10-digit mobile"
+                  className="h-full w-full bg-transparent pr-3 text-[16px] tracking-wide outline-none"
+                />
+              </div>
+            </label>
+            {showGuestErrors && (!guestNameOk || !guestPhoneOk) && (
+              <p className="mt-2 text-sm text-red-600">
+                {!guestNameOk ? "Please enter your name." : "Please enter a valid 10-digit mobile number."}
+              </p>
+            )}
+            <label className="mt-3 flex items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={guest.marketing_consent}
+                onChange={(e) => setGuest({ ...guest, marketing_consent: e.target.checked })}
+                className="mt-0.5 h-4 w-4 accent-black"
+              />
+              <span>Send me offers from Sohee&apos;s Kitchen on WhatsApp (optional)</span>
+            </label>
+            <p className={`mt-2 text-[11px] leading-snug ${GREY}`}>
+              Your details are used only by Sohee&apos;s Kitchen for your order{guest.marketing_consent ? " and offers you asked for" : ""}. We never
+              share them.
+            </p>
+          </section>
 
           {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
