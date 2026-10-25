@@ -467,6 +467,11 @@ export default function Dashboard() {
           onClose={() => setSelectedId(null)}
           onChanged={load}
           toast={showToast}
+          allRows={rows}
+          onMoved={(toTableId) => {
+            setSelectedId(toTableId);
+            void load();
+          }}
         />
       )}
 
@@ -696,6 +701,8 @@ function TableDrawer({
   onClose,
   onChanged,
   toast,
+  allRows,
+  onMoved,
 }: {
   table: Table;
   order: Order | null;
@@ -709,9 +716,12 @@ function TableDrawer({
   onClose: () => void;
   onChanged: () => void;
   toast: (msg: string) => void;
+  allRows: { table: Table; order: Order | null; items: OrderItem[]; guests: Guest[] }[];
+  onMoved: (toTableId: string) => void;
 }) {
   const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
+  const [moving, setMoving] = useState(false);
   // The order being charged; kept even after the table frees up, so the receipt can print.
   const [paying, setPaying] = useState<Order | null>(null);
   const [busy, setBusy] = useState(false);
@@ -960,12 +970,37 @@ function TableDrawer({
                 <span className="tabular-nums">{formatINR(bill.total)}</span>
               </button>
             </div>
-            <button disabled={busy} onClick={cancelOrder} className="mt-3 w-full text-center text-sm font-medium text-stone-400 hover:text-red-600">
-              Cancel this order
-            </button>
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                disabled={busy}
+                onClick={() => setMoving(true)}
+                className="rounded-lg px-3 py-1.5 text-sm font-semibold text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
+              >
+                ⇄ Move to another table
+              </button>
+              <button disabled={busy} onClick={cancelOrder} className="text-sm font-medium text-stone-400 hover:text-red-600">
+                Cancel this order
+              </button>
+            </div>
           </div>
         )}
       </aside>
+
+      {moving && order && (
+        <MoveTableModal
+          from={table}
+          order={order}
+          items={items}
+          rows={allRows}
+          waOn={waOn}
+          onClose={() => setMoving(false)}
+          onMoved={(to, merged) => {
+            setMoving(false);
+            toast(merged ? `✓ Merged into ${to.name}'s bill` : `✓ Moved to ${to.name}`);
+            onMoved(to.id);
+          }}
+        />
+      )}
 
       {adding && (
         <AddItemsModal
@@ -1661,5 +1696,106 @@ function GuestLine({ guests, className = "" }: { guests: Guest[]; className?: st
         </span>
       ))}
     </div>
+  );
+}
+
+function MoveTableModal({
+  from,
+  order,
+  items,
+  rows,
+  waOn,
+  onClose,
+  onMoved,
+}: {
+  from: Table;
+  order: Order;
+  items: OrderItem[];
+  rows: { table: Table; order: Order | null; items: OrderItem[]; guests: Guest[] }[];
+  waOn: boolean;
+  onClose: () => void;
+  onMoved: (to: Table, merged: boolean) => void;
+}) {
+  const supabase = supabaseBrowser();
+  const [target, setTarget] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const choices = rows.filter((r) => r.table.id !== from.id);
+  const picked = choices.find((r) => r.table.id === target) ?? null;
+  const merging = !!picked?.order;
+  const inKitchen = items.some((i) => i.status === "pending" || i.status === "ready");
+
+  async function confirmMove() {
+    if (!picked) return;
+    // Tickets already sent show the old table, so tell the kitchen (open WhatsApp inside the tap).
+    if (waOn && inKitchen) {
+      openWhatsApp(
+        `🔁 *TABLE CHANGE*\n${from.name.toUpperCase()} ➜ ${picked.table.name.toUpperCase()}` +
+          (merging ? `\n(joined with ${picked.table.name}'s order)` : "") +
+          "\nPlease serve the remaining dishes to the new table.",
+      );
+    }
+    setBusy(true);
+    setError(null);
+    const { data, error } = await supabase.rpc("move_order", { p_order_id: order.id, p_to_table: picked.table.id });
+    setBusy(false);
+    if (error) {
+      setError(error.message === "same_table" ? "That's the same table." : error.message === "order_not_open" ? "This bill is already closed." : error.message);
+      return;
+    }
+    onMoved(picked.table, !!(data as { merged?: boolean })?.merged);
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="p-6">
+        <h3 className="text-xl font-bold">Move {from.name}&apos;s order</h3>
+        <p className="mt-1 text-sm text-stone-500">Pick the table the guests are moving to. Everything comes along: dishes, kitchen progress, guest details and the bill.</p>
+
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {choices.map((r) => {
+            const on = r.table.id === target;
+            const busyTable = !!r.order;
+            const qty = r.items.filter((i) => i.status !== "void").reduce((n, i) => n + i.qty, 0);
+            return (
+              <button
+                key={r.table.id}
+                onClick={() => setTarget(r.table.id)}
+                className={`rounded-xl p-3 text-left ring-1 transition ${on ? "bg-stone-900 text-white ring-stone-900" : "bg-white ring-stone-200 hover:ring-stone-400"}`}
+              >
+                <div className="font-bold">{r.table.name}</div>
+                <div className={`text-xs ${on ? "text-white/70" : busyTable ? "text-amber-700" : "text-emerald-700"}`}>
+                  {busyTable ? `In use · ${qty} item${qty === 1 ? "" : "s"}` : "Free"}
+                </div>
+                {busyTable && r.guests[0] && <div className={`truncate text-xs ${on ? "text-white/70" : "text-stone-500"}`}>👤 {r.guests[0].name}</div>}
+              </button>
+            );
+          })}
+        </div>
+
+        {picked && (
+          <p className={`mt-4 rounded-xl p-3 text-sm ring-1 ${merging ? "bg-amber-50 text-amber-900 ring-amber-200" : "bg-emerald-50 text-emerald-900 ring-emerald-200"}`}>
+            {merging
+              ? `${picked.table.name} already has an order. ${from.name}'s dishes will be added to it, making one bill for both tables.`
+              : `${from.name}'s order moves to ${picked.table.name}. ${from.name} becomes free.`}
+            {inKitchen && waOn && " WhatsApp will open so you can tell the kitchen."}
+          </p>
+        )}
+        {error && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{error}</p>}
+
+        <div className="mt-5 flex gap-2">
+          <button onClick={onClose} className="h-12 flex-1 rounded-xl font-semibold text-stone-600 ring-1 ring-stone-200 hover:bg-stone-50">
+            Cancel
+          </button>
+          <button
+            disabled={!picked || busy}
+            onClick={confirmMove}
+            className="h-12 flex-[2] rounded-xl bg-stone-900 font-bold text-white disabled:opacity-40"
+          >
+            {busy ? "Moving…" : !picked ? "Pick a table" : merging ? `Merge into ${picked.table.name}` : `Move to ${picked.table.name}`}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
