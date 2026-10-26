@@ -1472,7 +1472,7 @@ function PaymentModal({
 // One line per dish + chosen options.
 type Pick = { itemId: string; qty: number; note: string; options: PickedOption[] };
 
-function AddItemsModal({
+export function AddItemsModal({
   tableId,
   tableName,
   waOn,
@@ -1521,7 +1521,9 @@ function AddItemsModal({
       const qty = Math.max(0, Math.min(50, (p[key]?.qty ?? 0) + d));
       const next = { ...p };
       if (qty === 0) delete next[key];
-      else next[key] = { itemId, qty, note: p[key]?.note ?? "", options: p[key]?.options ?? options };
+      // An existing line keeps its own dish and options; `key` for a dish with options is
+      // "dishId|Choice=Veg", which is not a dish id.
+      else next[key] = { itemId: p[key]?.itemId ?? itemId, qty, note: p[key]?.note ?? "", options: p[key]?.options ?? options };
       return next;
     });
   }
