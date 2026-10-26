@@ -89,7 +89,7 @@ export default function AnalyticsDashboard({ a, range, updatedAt, demo = false }
 
             {/* KPI row */}
             <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <KpiTile label="Net sales" kpi={a.kpis.netSales} format={formatINR} note={`+ ${formatINR(a.kpis.gst)} GST collected`} />
+              <KpiTile label="Net sales" kpi={a.kpis.netSales} format={formatINR} note={`before GST · ${formatINR(a.kpis.grossWithGst)} with GST`} />
               <KpiTile label="Paid bills" kpi={a.kpis.bills} format={(v) => v.toLocaleString("en-IN")} />
               <KpiTile label="Average bill" kpi={a.kpis.avgBill} format={(v) => formatINR(Math.round(v / 100) * 100)} />
               <KpiTile label="Items sold" kpi={a.kpis.itemsSold} format={(v) => v.toLocaleString("en-IN")} />

@@ -83,7 +83,8 @@ export default function Dashboard() {
   const [tables, setTables] = useState<Table[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [items, setItems] = useState<OrderItem[]>([]);
-  const [salesToday, setSalesToday] = useState(0);
+  // Today's paid bills, counted the same way as Analytics: net = before GST.
+  const [salesToday, setSalesToday] = useState({ net: 0, withGst: 0 });
   const [guests, setGuests] = useState<Guest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -116,7 +117,7 @@ export default function Dashboard() {
       loadCafe(),
       supabase.from("tables").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("orders").select("*").eq("status", "open"),
-      supabase.from("payments").select("amount_paise").gte("received_at", startOfDay.toISOString()),
+      supabase.from("orders").select("total_paise, gst_paise").eq("status", "paid").gte("closed_at", startOfDay.toISOString()),
     ]);
     if (t.error || o.error) {
       setError((t.error ?? o.error)!.message);
@@ -138,7 +139,9 @@ export default function Dashboard() {
     setItems((it.data ?? []) as OrderItem[]);
     const g = ids.length ? await supabase.from("order_guests").select("*").in("order_id", ids).order("created_at") : { data: [] };
     setGuests(((g.data ?? []) as Guest[]));
-    setSalesToday(((p.data ?? []) as { amount_paise: number }[]).reduce((s, x) => s + x.amount_paise, 0));
+    const paid = (p.data ?? []) as { total_paise: number | null; gst_paise: number | null }[];
+    const withGst = paid.reduce((s, x) => s + (x.total_paise ?? 0), 0);
+    setSalesToday({ net: withGst - paid.reduce((s, x) => s + (x.gst_paise ?? 0), 0), withGst });
   }, [supabase]);
 
   useEffect(() => {
@@ -301,7 +304,8 @@ export default function Dashboard() {
           />
           <Stat
             label="Today's sales"
-            value={formatINR(salesToday)}
+            value={formatINR(salesToday.net)}
+            hint={`before GST · ${formatINR(salesToday.withGst)} with GST`}
             tone="gold"
             className="col-span-2 md:col-span-1"
             icon={
@@ -515,10 +519,12 @@ function Stat({
   value,
   tone,
   icon,
+  hint,
   className = "",
 }: {
   label: string;
   value: string;
+  hint?: string;
   tone?: "rose" | "sky" | "amber" | "gold";
   icon?: React.ReactNode;
   className?: string;
@@ -552,6 +558,7 @@ function Stat({
         {icon && <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconBg}`}>{icon}</span>}
       </div>
       <div className="mt-2 text-2xl font-black tracking-tight tabular-nums text-[#2a2119]">{value}</div>
+      {hint && <div className="mt-0.5 text-xs font-medium text-[#8a7b6b] tabular-nums">{hint}</div>}
     </div>
   );
 }
