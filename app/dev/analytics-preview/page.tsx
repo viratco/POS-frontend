@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import AnalyticsDashboard, { AnalyticsSkeleton, istClock } from "@/app/admin/analytics/AnalyticsDashboard";
 import { computeAnalytics, parseRange, type RangeKey } from "@/lib/analytics";
 import { demoAnalyticsInput } from "@/lib/analyticsDemo";
+import type { Profit } from "@/lib/profit";
 
 // Design preview of the analytics dashboard with made-up data. Never served in production.
 export default function AnalyticsPreview({ searchParams }: PageProps<"/dev/analytics-preview">) {
@@ -19,7 +20,23 @@ async function Preview({ searchParams }: { searchParams: PageProps<"/dev/analyti
   const range = parseRange((await searchParams).range);
   await connection();
   const { a, updatedAt } = build(range);
-  return <AnalyticsDashboard a={a} range={range} updatedAt={updatedAt} demo />;
+  // Made-up stock spend: about a third of sales, a bit more last period.
+  const net = a.kpis.netSales;
+  const spend = { value: Math.round(net.value * 0.34), prev: Math.round(net.prev * 0.39) };
+  const profit: Profit = {
+    spend,
+    profit: { value: net.value - spend.value, prev: net.prev - spend.prev },
+    margin: { value: net.value ? 1 - spend.value / net.value : null, prev: net.prev ? 1 - spend.prev / net.prev : null },
+    owed: Math.round(spend.value * 0.2),
+    topItems: [
+      { name: "Raw chicken", paise: Math.round(spend.value * 0.32) },
+      { name: "Shin Ramyun packets", paise: Math.round(spend.value * 0.18) },
+      { name: "Vegetables", paise: Math.round(spend.value * 0.14) },
+      { name: "Milk", paise: Math.round(spend.value * 0.09) },
+      { name: "Gochujang", paise: Math.round(spend.value * 0.05) },
+    ],
+  };
+  return <AnalyticsDashboard a={a} profit={profit} range={range} updatedAt={updatedAt} demo />;
 }
 
 function build(range: RangeKey) {

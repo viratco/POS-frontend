@@ -4,6 +4,7 @@ import CafeName from "@/components/CafeName";
 import StaffNav from "@/components/StaffNav";
 import { RANGES, SLOW_ACCEPT_MINUTES, type Analytics, type Kpi, type RangeKey } from "@/lib/analytics";
 import { formatINR } from "@/lib/money";
+import type { Profit } from "@/lib/profit";
 import { Columns, Heatmap, MenuMatrix } from "./charts";
 import { BarList, C, Empty, inrCompact, minutes, QUADRANTS, SplitBar } from "./parts";
 import RefreshButton from "./RefreshButton";
@@ -33,7 +34,19 @@ export function AnalyticsSkeleton() {
   );
 }
 
-export default function AnalyticsDashboard({ a, range, updatedAt, demo = false }: { a: Analytics; range: RangeKey; updatedAt: string; demo?: boolean }) {
+export default function AnalyticsDashboard({
+  a,
+  profit,
+  range,
+  updatedAt,
+  demo = false,
+}: {
+  a: Analytics;
+  profit?: Profit | null;
+  range: RangeKey;
+  updatedAt: string;
+  demo?: boolean;
+}) {
   const meta = RANGES.find((r) => r.key === range)!;
   const base = demo ? "/dev/analytics-preview" : "/admin/analytics";
 
@@ -94,6 +107,8 @@ export default function AnalyticsDashboard({ a, range, updatedAt, demo = false }
               <KpiTile label="Average bill" kpi={a.kpis.avgBill} format={(v) => formatINR(Math.round(v / 100) * 100)} />
               <KpiTile label="Items sold" kpi={a.kpis.itemsSold} format={(v) => v.toLocaleString("en-IN")} />
             </section>
+
+            {profit && <ProfitSection p={profit} netSales={a.kpis.netSales.value} range={range} />}
 
             {/* Sales trend + mixes */}
             <section className="mt-3 grid gap-3 lg:grid-cols-3">
@@ -321,6 +336,94 @@ function Delta({ d, fmt, invert = false }: { d: number | null; fmt: (d: number) 
       <span aria-hidden>{d > 0 ? "▲" : "▼"}</span>
       {fmt(d)}
     </span>
+  );
+}
+
+// Net sales − stock bought (from Purchases) = gross profit, and the margin.
+function ProfitSection({ p, netSales, range }: { p: Profit; netSales: number; range: RangeKey }) {
+  const change = (k: { value: number; prev: number }) => (k.prev === 0 ? (k.value === 0 ? 0 : null) : (k.value - k.prev) / Math.abs(k.prev));
+  const rupees = (paise: number) => formatINR(Math.round(paise / 100) * 100);
+  const pct = (m: number | null) => (m == null ? "—" : `${Math.round(m * 100)}%`);
+  const marginPts = p.margin.value != null && p.margin.prev != null ? p.margin.value - p.margin.prev : null;
+  const share = netSales > 0 ? Math.min(1, Math.max(0, p.spend.value / netSales)) : 0;
+  return (
+    <section className="mt-3 rounded-2xl bg-white p-5 ring-1 ring-stone-200/70 sm:p-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-stone-900">Profit after stock</h3>
+        <p className="text-xs text-stone-400">Net sales − stock bought (Purchases)</p>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl bg-stone-50 p-4">
+          <div className="text-sm text-stone-500">Stock bought</div>
+          <div className="mt-1.5 text-[26px] leading-none font-semibold tracking-tight text-stone-900 tabular-nums">{rupees(p.spend.value)}</div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Delta d={change(p.spend)} fmt={(d) => `${Math.abs(Math.round(d * 100))}%`} invert />
+            <span className="text-xs text-stone-400">was {rupees(p.spend.prev)}</span>
+          </div>
+          {p.owed > 0 && <div className="mt-2 text-xs font-medium text-amber-700">{rupees(p.owed)} still to pay suppliers</div>}
+        </div>
+        <div className="rounded-xl bg-stone-50 p-4">
+          <div className="text-sm text-stone-500">Gross profit</div>
+          <div className={`mt-1.5 text-[26px] leading-none font-semibold tracking-tight tabular-nums ${p.profit.value < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+            {rupees(p.profit.value)}
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Delta d={change(p.profit)} fmt={(d) => `${Math.abs(Math.round(d * 100))}%`} />
+            <span className="text-xs text-stone-400">was {rupees(p.profit.prev)}</span>
+          </div>
+        </div>
+        <div className="rounded-xl bg-stone-50 p-4">
+          <div className="text-sm text-stone-500">Profit margin</div>
+          <div className={`mt-1.5 text-[26px] leading-none font-semibold tracking-tight tabular-nums ${(p.margin.value ?? 0) < 0 ? "text-rose-700" : "text-stone-900"}`}>
+            {pct(p.margin.value)}
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            <Delta d={marginPts} fmt={(d) => `${Math.abs(Math.round(d * 100))} pts`} />
+            <span className="text-xs text-stone-400">was {pct(p.margin.prev)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Of every ₹100 of sales, how much went on stock */}
+      {netSales > 0 && (
+        <div className="mt-5">
+          <div className="flex h-3 overflow-hidden rounded-full bg-emerald-500/80">
+            <div className="h-full bg-rose-400" style={{ width: `${share * 100}%` }} />
+          </div>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-stone-500">
+            <span>
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-rose-400" />
+              Stock: ₹{Math.round(share * 100)} of every ₹100 sold
+            </span>
+            <span>
+              <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />
+              Left after stock: ₹{100 - Math.round(share * 100)}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {p.topItems.length > 0 && (
+        <div className="mt-5">
+          <div className="text-xs font-semibold tracking-wide text-stone-400 uppercase">Biggest stock costs</div>
+          <ul className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            {p.topItems.map((i) => (
+              <li key={i.name} className="flex justify-between gap-3 text-sm">
+                <span className="truncate text-stone-700">{i.name}</span>
+                <span className="font-semibold text-stone-900 tabular-nums">{rupees(i.paise)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <p className="mt-5 text-xs leading-relaxed text-stone-400">
+        Stock counts on the day it was bought, so a big bulk buy makes that day look low and the next days look high
+        {range === "today" || range === "7d" ? ". 30 or 90 days gives the truest margin" : ""}. Rent, salaries, gas and electricity aren&apos;t included. Add
+        every supplier bill under Purchases for an accurate number.
+      </p>
+    </section>
   );
 }
 
