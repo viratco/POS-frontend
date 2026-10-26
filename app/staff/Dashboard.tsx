@@ -208,7 +208,6 @@ export default function Dashboard() {
   }
 
   async function reject(tableName: string, waiting: OrderItem[]) {
-    if (!confirm(`Reject the new order for ${tableName}? It won't be made or billed.`)) return;
     const { error } = await supabase.from("order_items").update({ status: "void" }).in("id", waiting.map((i) => i.id));
     if (error) setError(error.message);
     else showToast(`${tableName} order rejected`);
@@ -349,13 +348,14 @@ export default function Dashboard() {
                     >
                       {accepting === order!.id ? "Sending…" : "✓ Accept & Send to Kitchen"}
                     </button>
-                    <button
+                    <ConfirmButton
                       disabled={accepting === order!.id}
-                      onClick={() => reject(table.name, waiting)}
+                      onConfirm={() => reject(table.name, waiting)}
                       className="h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-50"
+                      armedClassName="h-11 rounded-xl bg-red-600 px-3 text-xs font-bold text-white shadow-sm"
                     >
                       Reject
-                    </button>
+                    </ConfirmButton>
                   </div>
                 </div>
               ))}
@@ -838,10 +838,9 @@ function TableDrawer({
                 >
                   {accepting ? "Sending…" : "✓ Accept & send to kitchen"}
                 </button>
-                <button
+                <ConfirmButton
                   disabled={accepting || busy}
-                  onClick={() =>
-                    confirm(`Reject the new order for ${table.name}?`) &&
+                  onConfirm={() =>
                     setStatus(
                       waiting.map((i) => i.id),
                       "void",
@@ -849,9 +848,10 @@ function TableDrawer({
                     )
                   }
                   className="h-12 rounded-xl bg-white px-4 font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50"
+                  armedClassName="h-12 rounded-xl bg-red-600 px-4 font-bold text-white shadow-sm"
                 >
                   Reject
-                </button>
+                </ConfirmButton>
               </div>
             </Section>
           )}
@@ -1140,6 +1140,42 @@ function ItemLine({
         </div>
       )}
     </div>
+  );
+}
+
+// Tap once: turns red and asks "Tap again". Tap again within 4 s: does it.
+// Used instead of the browser's confirm() pop-up, which browsers silently block after a few.
+function ConfirmButton({
+  onConfirm,
+  disabled,
+  className,
+  armedClassName,
+  children,
+}: {
+  onConfirm: () => void;
+  disabled?: boolean;
+  className: string;
+  armedClassName: string;
+  children: React.ReactNode;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  return (
+    <button
+      disabled={disabled}
+      onClick={() => {
+        if (!armed) return setArmed(true);
+        setArmed(false);
+        onConfirm();
+      }}
+      className={armed ? armedClassName : className}
+    >
+      {armed ? "Tap again to reject" : children}
+    </button>
   );
 }
 
