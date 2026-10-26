@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { PRODUCT_NAME } from "@/lib/business";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -8,7 +9,7 @@ const instrument = Instrument_Serif({ variable: "--font-instrument", subsets: ["
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], axes: ["SOFT", "opsz"] });
 
 export const metadata: Metadata = {
-  title: "Sohee's Kitchen",
+  title: PRODUCT_NAME,
   description: "Order from your table",
 };
 

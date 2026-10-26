@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { initial, useCafe } from "@/lib/cafe";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
@@ -10,10 +11,12 @@ const links = [
   { href: "/admin", label: "Menu", icon: "M6 4h12v16H6zM9 8h6M9 12h6M9 16h4" },
   { href: "/admin/analytics", label: "Analytics", icon: "M4 20V10M10 20V4M16 20v-7M22 20H2" },
   { href: "/qr", label: "QR codes", icon: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2" },
+  { href: "/admin/settings", label: "Settings", icon: "M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" },
 ];
 
 export default function StaffNav({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname();
+  const cafe = useCafe();
 
   async function signOut() {
     if (!confirm("Sign out of this device?")) return;
@@ -27,9 +30,9 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
     <header className="no-print sticky top-0 z-30 border-b border-[#ece3d6] bg-[#fdfbf7]/95 backdrop-blur-md">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
         <div className="flex items-center gap-2.5 pr-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2a1a10] font-poster text-lg text-[#ecd5b1] italic shadow-sm">S</div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2a1a10] font-poster text-lg text-[#ecd5b1] italic shadow-sm">{initial(cafe?.name)}</div>
           <div className="hidden leading-tight sm:block">
-            <div className="text-[15px] font-bold tracking-tight text-[#2a2119]">Sohee&apos;s Kitchen</div>
+            <div className="max-w-[12rem] truncate text-[15px] font-bold tracking-tight text-[#2a2119]">{cafe?.name ?? "\u00a0"}</div>
             <div className="text-[11px] font-semibold tracking-wider text-[#8a7b6b] uppercase">Staff POS</div>
           </div>
         </div>

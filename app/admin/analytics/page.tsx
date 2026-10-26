@@ -5,7 +5,7 @@ import { loadAnalyticsInput } from "@/lib/analyticsData";
 import { supabaseServer } from "@/lib/supabase/server";
 import AnalyticsDashboard, { AnalyticsSkeleton, istClock } from "./AnalyticsDashboard";
 
-export const metadata = { title: "Analytics · Sohee's Kitchen" };
+export const metadata = { title: "Analytics" };
 
 export default function AnalyticsPage({ searchParams }: PageProps<"/admin/analytics">) {
   return (

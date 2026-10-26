@@ -2,7 +2,8 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { BUSINESS, RESTAURANT_SAC } from "@/lib/business";
+import { RESTAURANT_SAC } from "@/lib/business";
+import { type Cafe, loadCafe } from "@/lib/cafe";
 import { amount, billFor, gstSplit } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Order, OrderItem } from "@/lib/types";
@@ -10,6 +11,7 @@ import type { Order, OrderItem } from "@/lib/types";
 type Kind = "bill" | "receipt" | "kot";
 type Paper = "80" | "58";
 type Loaded = {
+  cafe: Cafe | null;
   order: Order & { tables: { name: string } | null };
   items: OrderItem[];
   payments: { method: "upi" | "cash"; amount_paise: number; received_at: string }[];
@@ -41,12 +43,13 @@ export default function PrintDoc() {
     setPrintedAt(new Date().toISOString());
     const supabase = supabaseBrowser();
     void Promise.all([
+      loadCafe(),
       supabase.from("orders").select("*, tables(name)").eq("id", orderId).single(),
       supabase.from("order_items").select("*").eq("order_id", orderId).order("created_at"),
       supabase.from("payments").select("method, amount_paise, received_at").eq("order_id", orderId),
-    ]).then(([o, i, p]) => {
+    ]).then(([cafe, o, i, p]) => {
       if (o.error) return setError(o.error.message);
-      setData({ order: o.data as Loaded["order"], items: (i.data ?? []) as OrderItem[], payments: (p.data ?? []) as Loaded["payments"] });
+      setData({ cafe, order: o.data as Loaded["order"], items: (i.data ?? []) as OrderItem[], payments: (p.data ?? []) as Loaded["payments"] });
     });
   }, [orderId]);
 
@@ -91,9 +94,9 @@ export default function PrintDoc() {
             🖨 Print
           </button>
         </div>
-        {kind !== "kot" && !BUSINESS.gstin && (
+        {kind !== "kot" && data && !data.cafe?.gstin && (
           <p className="w-full rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-amber-200">
-            GSTIN isn&apos;t set, so this isn&apos;t a valid tax invoice yet. Add NEXT_PUBLIC_GSTIN (and address) in the app&apos;s settings.
+            GSTIN isn&apos;t set, so this isn&apos;t a valid tax invoice yet. Add it (and the address) under Settings.
           </p>
         )}
       </div>
@@ -127,7 +130,7 @@ function Line({ left, right, bold, big }: { left: React.ReactNode; right: React.
 }
 
 function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt"; printedAt: string }) {
-  const { order, items, payments } = data;
+  const { cafe, order, items, payments } = data;
   const paid = order.status === "paid";
   const billed = items.filter((i) => ["pending", "ready", "served"].includes(i.status));
   // Paid bills use the frozen totals; open bills are an estimate from current items.
@@ -145,13 +148,13 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
     <div>
       <div className="text-center">
         <div className="font-bold uppercase" style={{ fontSize: "1.35em", letterSpacing: "0.04em" }}>
-          {BUSINESS.name}
+          {cafe?.name}
         </div>
-        {BUSINESS.legalName && <div>{BUSINESS.legalName}</div>}
-        {BUSINESS.address && <div className="whitespace-pre-line">{BUSINESS.address}</div>}
-        {BUSINESS.phone && <div>Ph: {BUSINESS.phone}</div>}
-        {BUSINESS.gstin && <div>GSTIN: {BUSINESS.gstin}</div>}
-        {BUSINESS.fssai && <div>FSSAI: {BUSINESS.fssai}</div>}
+        {cafe?.legal_name && <div>{cafe.legal_name}</div>}
+        {cafe?.address && <div className="whitespace-pre-line">{cafe.address}</div>}
+        {cafe?.phone && <div>Ph: {cafe.phone}</div>}
+        {cafe?.gstin && <div>GSTIN: {cafe.gstin}</div>}
+        {cafe?.fssai && <div>FSSAI: {cafe.fssai}</div>}
       </div>
 
       <Hr />
@@ -210,7 +213,7 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
       <Hr />
       <div className="text-center">
         {isInvoice && <div className="text-[0.85em]">SAC {RESTAURANT_SAC} · Restaurant service</div>}
-        <div className="mt-[1mm] font-semibold">{BUSINESS.footer}</div>
+        <div className="mt-[1mm] font-semibold">{cafe?.bill_footer}</div>
       </div>
     </div>
   );

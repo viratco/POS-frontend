@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { supabaseAnon } from "@/lib/supabase/server";
 import type { Category, MenuItem } from "@/lib/types";
-import MenuClient from "./MenuClient";
+import MenuClient, { type Brand } from "./MenuClient";
 
 export const viewport: Viewport = { themeColor: "#ffffff" };
+
+type TableInfo = { id: string; name: string; cafe_id?: string; cafe_name?: string; cafe_slug?: string; logo_url?: string | null };
 
 export default function TablePage({ params }: PageProps<"/t/[token]">) {
   return (
@@ -19,18 +21,28 @@ async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const supabase = supabaseAnon();
 
-  const [{ data: table }, { data: categories }, { data: items }] = await Promise.all([
-    supabase.rpc("get_table_by_token", { p_qr_token: token }).maybeSingle<{ id: string; name: string }>(),
-    supabase.from("menu_categories").select("*").order("sort_order"),
-    supabase.from("menu_items").select("*").order("sort_order"),
-  ]);
-
+  const { data: table } = await supabase.rpc("get_table_by_token", { p_qr_token: token }).maybeSingle<TableInfo>();
   if (!table) notFound();
+
+  // Only this table's café's menu. (cafe_id is missing only on a database from before multi-café.)
+  let categoriesQ = supabase.from("menu_categories").select("*").order("sort_order");
+  let itemsQ = supabase.from("menu_items").select("*").order("sort_order");
+  if (table.cafe_id) {
+    categoriesQ = categoriesQ.eq("cafe_id", table.cafe_id);
+    itemsQ = itemsQ.eq("cafe_id", table.cafe_id);
+  }
+  const [{ data: categories }, { data: items }] = await Promise.all([categoriesQ, itemsQ]);
+  const brand: Brand = {
+    name: table.cafe_name ?? "Sohee's Kitchen",
+    slug: table.cafe_slug ?? "sohees",
+    logoUrl: table.cafe_slug ? (table.logo_url ?? null) : "/logo.png",
+  };
 
   return (
     <MenuClient
       token={token}
       tableName={table.name}
+      brand={brand}
       categories={(categories ?? []) as Category[]}
       items={((items ?? []) as Partial<MenuItem>[]).map(withDefaults)}
     />

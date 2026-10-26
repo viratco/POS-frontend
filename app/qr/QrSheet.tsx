@@ -3,6 +3,7 @@
 import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
+import { type Cafe, useCafe } from "@/lib/cafe";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Table } from "@/lib/types";
 
@@ -19,6 +20,7 @@ export default function QrSheet() {
   const [baseUrl, setBaseUrl] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [layout, setLayout] = useState<Layout>("a4");
+  const cafe = useCafe();
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -116,7 +118,7 @@ export default function QrSheet() {
                 className={layout === "a4" ? "flex items-center justify-center outline outline-1 -outline-offset-1 outline-dashed outline-stone-300" : ""}
                 style={layout === "a4" ? { width: "105mm", height: "148.5mm" } : undefined}
               >
-                <Card table={t} qr={codes[t.id]} />
+                <Card table={t} qr={codes[t.id]} cafe={cafe} />
               </div>
             ))}
           </div>
@@ -142,7 +144,7 @@ export default function QrSheet() {
   );
 }
 
-function Card({ table, qr }: { table: Table; qr?: string }) {
+function Card({ table, qr, cafe }: { table: Table; qr?: string; cafe: Cafe | null }) {
   return (
     <div
       className="qr-card relative overflow-hidden text-white"
@@ -153,8 +155,18 @@ function Card({ table, qr }: { table: Table; qr?: string }) {
       }}
     >
       {/* Logo + tagline */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/brand/sohees-logo-white.png" alt="Sohee's Kitchen" className="absolute left-1/2 -translate-x-1/2" style={{ top: "7mm", width: "64mm" }} />
+      {cafe?.qr_logo_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={cafe.qr_logo_url} alt={cafe.name} className="absolute left-1/2 -translate-x-1/2" style={{ top: "7mm", width: "64mm" }} />
+      ) : (
+        // No white logo uploaded: the café's name in lettering, in the same space.
+        <div
+          className="absolute inset-x-[8mm] flex items-center justify-center text-center font-poster italic leading-none"
+          style={{ top: "7mm", height: "17mm", fontSize: (cafe?.name.length ?? 0) > 16 ? "20pt" : "28pt" }}
+        >
+          {cafe?.name}
+        </div>
+      )}
       <div
         className="absolute inset-x-0 text-center font-display"
         style={{ top: "26.5mm", fontSize: "12.5pt", letterSpacing: "0.16em", fontWeight: 500 }}

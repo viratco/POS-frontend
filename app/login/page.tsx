@@ -2,18 +2,19 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import { PRODUCT_NAME } from "@/lib/business";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 // Only follow ?next= to a page on this site. Blocks tricks like "/\\evil.com" or "//evil.com",
 // which browsers treat as another website (a phishing redirect after sign-in).
-function safeNext(next: string | null) {
-  if (!next) return "/staff";
+function safeNext(next: string | null, home: string) {
+  if (!next) return home;
   try {
     const url = new URL(next, window.location.origin);
-    if (url.origin !== window.location.origin) return "/staff";
+    if (url.origin !== window.location.origin) return home;
     return url.pathname + url.search;
   } catch {
-    return "/staff";
+    return home;
   }
 }
 
@@ -39,24 +40,28 @@ function LoginForm() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { error } = await supabaseBrowser().auth.signInWithPassword({ email: email.trim(), password });
+    const supabase = supabaseBrowser();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     if (error) {
       setBusy(false);
       setError(error.message === "Invalid login credentials" ? "Wrong email or password." : error.message);
       return;
     }
+    // Kitchen tablets land on the kitchen screen; everyone else on the tables.
+    const { data: me } = await supabase.from("staff").select("role").eq("user_id", data.user.id).maybeSingle();
+    const home = me?.role === "kitchen" ? "/kitchen" : "/staff";
     // Full page load (not router.replace): drops any pages the router cached while
     // signed out, which would otherwise bounce straight back to /login.
-    window.location.assign(safeNext(params.get("next")));
+    window.location.assign(safeNext(params.get("next"), home));
   }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f4f1] p-5">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2a1a10] font-poster text-3xl text-[#ecd5b1] italic shadow-lg">S</div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">Sohee&apos;s Kitchen</h1>
-          <p className="text-sm text-stone-500">Staff sign in</p>
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2a1a10] font-poster text-3xl text-[#ecd5b1] italic shadow-lg">{PRODUCT_NAME[0]}</div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">{PRODUCT_NAME}</h1>
+          <p className="text-sm text-stone-500">Sign in to your café</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import CafeName from "@/components/CafeName";
 import StaffNav from "@/components/StaffNav";
 import { RANGES, SLOW_ACCEPT_MINUTES, type Analytics, type Kpi, type RangeKey } from "@/lib/analytics";
 import { formatINR } from "@/lib/money";
@@ -49,7 +50,9 @@ export default function AnalyticsDashboard({ a, range, updatedAt, demo = false }
         {/* Header + range filter */}
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-stone-400 uppercase">Sohee&apos;s Kitchen</p>
+            <p className="text-xs font-semibold tracking-[0.18em] text-stone-400 uppercase">
+              <CafeName />
+            </p>
             <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-stone-900">Analytics</h1>
             <p className="mt-1.5 text-sm text-stone-500">
               Paid bills · net of GST · {meta.compare} · updated {updatedAt}

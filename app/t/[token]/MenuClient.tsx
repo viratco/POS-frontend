@@ -17,7 +17,11 @@ const NO_SUB = "More";
 type Tile = { id: string; name: string; image: string | null; fallback?: string | null };
 
 // The Best Seller tile isn't a real category, so its poster lives at a fixed spot in storage.
+// Sohee's has a designed "Best Seller" poster; other cafés show their top dish's photo instead.
 const BEST_SELLER_POSTER = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/menu-photos/categories/best-seller.jpg`;
+
+/** The café this table belongs to. */
+export type Brand = { name: string; slug: string; logoUrl: string | null };
 
 const INK = "text-[#1a202c]";
 const GUEST_KEY = "sohees.guest";
@@ -34,11 +38,13 @@ const GREY = "text-[#718096]";
 export default function MenuClient({
   token,
   tableName,
+  brand,
   categories,
   items,
 }: {
   token: string;
   tableName: string;
+  brand: Brand;
   categories: Category[];
   items: MenuItem[];
 }) {
@@ -73,7 +79,7 @@ export default function MenuClient({
 
   const tiles: Tile[] = [
     ...(bestSellers.length
-      ? [{ id: BEST_SELLER, name: "Best Seller", image: BEST_SELLER_POSTER, fallback: bestSellers.find((i) => i.image_url)?.image_url ?? null }]
+      ? [{ id: BEST_SELLER, name: "Best Seller", image: brand.slug === "sohees" ? BEST_SELLER_POSTER : null, fallback: bestSellers.find((i) => i.image_url)?.image_url ?? null }]
       : []),
     ...categories
       .filter((c) => items.some((i) => i.category_id === c.id))
@@ -188,7 +194,7 @@ export default function MenuClient({
   }
 
   if (placed) {
-    return <Confirmation tableName={tableName} placed={placed} onAgain={() => setPlaced(null)} />;
+    return <Confirmation brand={brand} tableName={tableName} placed={placed} onAgain={() => setPlaced(null)} />;
   }
 
   const current = tiles.find((t) => t.id === openTile);
@@ -235,7 +241,7 @@ export default function MenuClient({
           onOpenPicker={() => setPicking(true)}
         />
       ) : (
-        <BrandHeader tableName={tableName} />
+        <BrandHeader brand={brand} tableName={tableName} />
       )}
 
       <main className="mx-auto w-full max-w-md pb-32">
@@ -410,10 +416,10 @@ export default function MenuClient({
                 onChange={(e) => setGuest({ ...guest, marketing_consent: e.target.checked })}
                 className="mt-0.5 h-4 w-4 accent-black"
               />
-              <span>Send me offers from Sohee&apos;s Kitchen on WhatsApp (optional)</span>
+              <span>Send me offers from {brand.name} on WhatsApp (optional)</span>
             </label>
             <p className={`mt-2 text-[11px] leading-snug ${GREY}`}>
-              Your details are used only by Sohee&apos;s Kitchen for your order{guest.marketing_consent ? " and offers you asked for" : ""}. We never
+              Your details are used only by {brand.name} for your order{guest.marketing_consent ? " and offers you asked for" : ""}. We never
               share them.
             </p>
           </section>
@@ -444,13 +450,13 @@ export default function MenuClient({
 
 /* ───────────────────────── headers ───────────────────────── */
 
-function BrandHeader({ tableName }: { tableName: string }) {
+function BrandHeader({ brand, tableName }: { brand: Brand; tableName: string }) {
   return (
     <header className="sticky top-0 z-20 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
       <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
-        <Logo />
+        <Logo brand={brand} />
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-lg font-bold text-[#2d3748]">Sohees Kitchen</div>
+          <div className="truncate text-lg font-bold text-[#2d3748]">{brand.name}</div>
           <div className={`truncate text-[15px] ${GREY}`}>{tableName}</div>
         </div>
         <span className="rounded-lg border-[1.5px] border-[#2d3748] px-4 py-1.5 text-[15px] font-medium text-[#2d3748]">Dine In</span>
@@ -633,18 +639,18 @@ function VegToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => vo
   );
 }
 
-// Drop the real logo at frontend/public/logo.png to replace this.
-function Logo() {
+// The café's logo (Settings → logo), or its name's first letter if it has none.
+function Logo({ brand }: { brand: Brand }) {
   const [failed, setFailed] = useState(false);
-  if (!failed) {
+  if (brand.logoUrl && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src="/logo.png" alt="Sohee's Kitchen" onError={() => setFailed(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />
+      <img src={brand.logoUrl} alt={brand.name} onError={() => setFailed(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />
     );
   }
   return (
     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1b2a41] font-poster text-[11px] leading-none text-[#d9c6a0] italic">
-      Sohee&apos;s
+      {brand.name.split(/\s+/)[0]}
     </div>
   );
 }
@@ -874,11 +880,11 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
   );
 }
 
-function Confirmation({ tableName, placed, onAgain }: { tableName: string; placed: PlacedItem[]; onAgain: () => void }) {
+function Confirmation({ brand, tableName, placed, onAgain }: { brand: Brand; tableName: string; placed: PlacedItem[]; onAgain: () => void }) {
   const placedTotal = placed.reduce((s, i) => s + i.price_paise_snapshot * i.qty, 0);
   return (
     <div className={`min-h-screen bg-white ${INK}`}>
-      <BrandHeader tableName={tableName} />
+      <BrandHeader brand={brand} tableName={tableName} />
       <main className="mx-auto w-full max-w-md px-5 pt-12 pb-10">
         <div className="flex flex-col items-center text-center">
           <div className="flex h-20 w-20 animate-pop items-center justify-center rounded-full bg-[#38a169] text-white">

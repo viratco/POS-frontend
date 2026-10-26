@@ -6,7 +6,8 @@ import SoundToggle from "@/components/SoundToggle";
 import StaffNav from "@/components/StaffNav";
 import { chime } from "@/lib/chime";
 import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } from "@/lib/kitchenWhatsApp";
-import { applyDiscount, billFor, type Discount, formatINR, GST_RATE_BPS } from "@/lib/money";
+import { type Cafe, loadCafe } from "@/lib/cafe";
+import { applyDiscount, billFor, type Discount, formatINR, gstRate } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
 import type { Category, Guest, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
@@ -70,7 +71,11 @@ export default function Dashboard() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
-  const [viewMode, setViewMode] = useState<"floorplan" | "cards">("floorplan");
+  const [cafe, setCafe] = useState<Cafe | null>(null);
+  const [chosenView, setViewMode] = useState<"floorplan" | "cards">("floorplan");
+  // The drawn floor plan is Sohee's own room layout; other cafés get the card grid.
+  const hasFloorPlan = cafe?.slug === "sohees";
+  const viewMode = hasFloorPlan ? chosenView : "cards";
   const [accepting, setAccepting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -90,7 +95,9 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-    const [t, o, p] = await Promise.all([
+    // The café loads first-time only (cached); its GST rate is needed for the totals below.
+    const [c, t, o, p] = await Promise.all([
+      loadCafe(),
       supabase.from("tables").select("*").eq("is_active", true).order("sort_order"),
       supabase.from("orders").select("*").eq("status", "open"),
       supabase.from("payments").select("amount_paise").gte("received_at", startOfDay.toISOString()),
@@ -109,6 +116,7 @@ export default function Dashboard() {
       return;
     }
     setError(null);
+    setCafe(c);
     setTables((t.data ?? []) as Table[]);
     setOrders(openOrders);
     setItems((it.data ?? []) as OrderItem[]);
@@ -179,7 +187,7 @@ export default function Dashboard() {
   async function setupTables(names: string[]) {
     const { error } = await supabase
       .from("tables")
-      .upsert(names.map((name) => ({ name, is_active: true, sort_order: Number(name.replace(/\D/g, "")) * 10 })), { onConflict: "name" });
+      .upsert(names.map((name) => ({ name, is_active: true, sort_order: Number(name.replace(/\D/g, "")) * 10 })), { onConflict: "cafe_id,name" });
     if (error) {
       setError(error.message);
       return;
@@ -367,6 +375,7 @@ export default function Dashboard() {
 
             <div className="flex flex-wrap items-center gap-2">
               {/* View Switcher: Cards vs Floor Plan */}
+              {hasFloorPlan && (
               <div className="flex items-center rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
                 <button
                   onClick={() => setViewMode("cards")}
@@ -394,6 +403,7 @@ export default function Dashboard() {
                   <span>Floor Plan</span>
                 </button>
               </div>
+              )}
 
               {/* Filter Pills */}
               <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
@@ -1030,7 +1040,7 @@ function TableDrawer({
             const { data, error } = await supabase.rpc("close_order", {
               p_order_id: paying.id,
               p_method: method,
-              p_gst_rate_bps: GST_RATE_BPS,
+              p_gst_rate_bps: gstRate(),
               ...(discount
                 ? { p_discount_type: discount.type, p_discount_value: discount.value, p_discount_reason: discount.reason || null }
                 : {}),

@@ -1,13 +1,8 @@
-// Café details printed on bills. Set these in .env.local / Vercel env vars.
-export const BUSINESS = {
-  name: process.env.NEXT_PUBLIC_BUSINESS_NAME || "Sohee's Kitchen",
-  legalName: process.env.NEXT_PUBLIC_BUSINESS_LEGAL_NAME || "",
-  address: process.env.NEXT_PUBLIC_BUSINESS_ADDRESS || "",
-  phone: process.env.NEXT_PUBLIC_BUSINESS_PHONE || "",
-  gstin: process.env.NEXT_PUBLIC_GSTIN || "",
-  fssai: process.env.NEXT_PUBLIC_FSSAI || "",
-  footer: process.env.NEXT_PUBLIC_BILL_FOOTER || "Thank you! Visit again.",
-};
+// Each café's bill details (name, address, GSTIN, FSSAI, footer) live in the `cafes` table
+// and are edited under Settings. See lib/cafe.ts.
+
+// The product's own name, shown where no café is known yet (sign-in page, home page).
+export const PRODUCT_NAME = process.env.NEXT_PUBLIC_PRODUCT_NAME || "Café POS";
 
 // SAC code for restaurant services (GST).
 export const RESTAURANT_SAC = "996331";
