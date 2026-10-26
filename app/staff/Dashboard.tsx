@@ -47,6 +47,22 @@ function friendlyError(msg: string) {
 }
 
 // Opens a printable view in a new tab; call directly from a click handler.
+// Reject a QR order's waiting dishes. If that leaves nothing else on the table,
+// the empty order is closed too, so the table shows as free again.
+async function rejectWaiting(
+  supabase: ReturnType<typeof supabaseBrowser>,
+  orderId: string,
+  waiting: OrderItem[],
+  all: OrderItem[],
+) {
+  const ids = waiting.map((i) => i.id);
+  const res = await supabase.from("order_items").update({ status: "void" }).in("id", ids);
+  if (res.error) return { error: res.error, emptied: false };
+  if (all.some((i) => i.status !== "void" && !ids.includes(i.id))) return { error: null, emptied: false };
+  const done = await supabase.from("orders").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", orderId);
+  return { error: done.error, emptied: !done.error };
+}
+
 function openPrint(orderId: string, type: "bill" | "receipt" | "kot") {
   window.open(`/staff/print/${orderId}?type=${type}&auto=1`, "_blank");
 }
@@ -207,8 +223,8 @@ export default function Dashboard() {
     void load();
   }
 
-  async function reject(tableName: string, waiting: OrderItem[]) {
-    const { error } = await supabase.from("order_items").update({ status: "void" }).in("id", waiting.map((i) => i.id));
+  async function reject(orderId: string, tableName: string, waiting: OrderItem[], all: OrderItem[]) {
+    const { error } = await rejectWaiting(supabase, orderId, waiting, all);
     if (error) setError(error.message);
     else showToast(`${tableName} order rejected`);
     void load();
@@ -314,7 +330,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium text-rose-700">Check the guests are seated, then accept to dispatch</span>
             </div>
             <div className="mt-3.5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {waitingOrders.map(({ order, table, waiting, guests: who }) => (
+              {waitingOrders.map(({ order, table, waiting, items: orderItems, guests: who }) => (
                 <div key={order!.id} className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm ring-2 ring-rose-200/50">
                   <div>
                     <div className="flex items-baseline justify-between border-b border-rose-100 pb-2">
@@ -350,7 +366,7 @@ export default function Dashboard() {
                     </button>
                     <ConfirmButton
                       disabled={accepting === order!.id}
-                      onConfirm={() => reject(table.name, waiting)}
+                      onConfirm={() => reject(order!.id, table.name, waiting, orderItems)}
                       className="h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-50"
                       armedClassName="h-11 rounded-xl bg-red-600 px-3 text-xs font-bold text-white shadow-sm"
                     >
@@ -840,13 +856,15 @@ function TableDrawer({
                 </button>
                 <ConfirmButton
                   disabled={accepting || busy}
-                  onConfirm={() =>
-                    setStatus(
-                      waiting.map((i) => i.id),
-                      "void",
-                      "Order rejected",
-                    )
-                  }
+                  onConfirm={async () => {
+                    let emptied = false;
+                    await run(async () => {
+                      const r = await rejectWaiting(supabase, order!.id, waiting, items);
+                      emptied = r.emptied;
+                      return r;
+                    }, "Order rejected");
+                    if (emptied) onClose();
+                  }}
                   className="h-12 rounded-xl bg-white px-4 font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50"
                   armedClassName="h-12 rounded-xl bg-red-600 px-4 font-bold text-white shadow-sm"
                 >
