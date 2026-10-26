@@ -35,7 +35,7 @@ async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
   const brand: Brand = {
     name: table.cafe_name ?? "Sohee's Kitchen",
     slug: table.cafe_slug ?? "sohees",
-    logoUrl: table.cafe_slug ? (table.logo_url ?? null) : "/logo.png",
+    logoUrl: table.logo_url ?? null,
   };
 
   return (

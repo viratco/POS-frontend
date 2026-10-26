@@ -645,7 +645,14 @@ function Logo({ brand }: { brand: Brand }) {
   if (brand.logoUrl && !failed) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={brand.logoUrl} alt={brand.name} onError={() => setFailed(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />
+      <img
+        src={brand.logoUrl}
+        alt={brand.name}
+        // Catches an image that failed before the page became interactive (onError missed it).
+        ref={(img) => {
+          if (img?.complete && img.naturalWidth === 0) setFailed(true);
+        }}
+        onError={() => setFailed(true)} className="h-12 w-12 shrink-0 rounded-full object-cover" />
     );
   }
   return (
