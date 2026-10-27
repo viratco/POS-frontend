@@ -115,29 +115,27 @@ export default function Dashboard() {
     const [c, t, o, p] = await Promise.all([
       loadCafe(),
       supabase.from("tables").select("*").eq("is_active", true).order("sort_order"),
-      supabase.from("orders").select("*").eq("status", "open"),
+      // Open orders with their dishes and guests in one round trip (the database is far away).
+      supabase
+        .from("orders")
+        .select("*, order_items(*), order_guests(*)")
+        .eq("status", "open")
+        .order("created_at", { referencedTable: "order_items" })
+        .order("created_at", { referencedTable: "order_guests" }),
       supabase.from("orders").select("total_paise, gst_paise").eq("status", "paid").gte("closed_at", startOfDay.toISOString()),
     ]);
     if (t.error || o.error) {
       setError((t.error ?? o.error)!.message);
       return;
     }
-    const openOrders = (o.data ?? []) as Order[];
-    const ids = openOrders.map((x) => x.id);
-    const it = ids.length
-      ? await supabase.from("order_items").select("*").in("order_id", ids).order("created_at")
-      : { data: [], error: null };
-    if (it.error) {
-      setError(it.error.message);
-      return;
-    }
+    type OpenOrder = Order & { order_items: OrderItem[]; order_guests: Guest[] };
+    const open = (o.data ?? []) as OpenOrder[];
     setError(null);
     setCafe(c);
     setTables((t.data ?? []) as Table[]);
-    setOrders(openOrders);
-    setItems((it.data ?? []) as OrderItem[]);
-    const g = ids.length ? await supabase.from("order_guests").select("*").in("order_id", ids).order("created_at") : { data: [] };
-    setGuests(((g.data ?? []) as Guest[]));
+    setOrders(open);
+    setItems(open.flatMap((x) => x.order_items ?? []));
+    setGuests(open.flatMap((x) => x.order_guests ?? []));
     const paid = (p.data ?? []) as { total_paise: number | null; gst_paise: number | null }[];
     const withGst = paid.reduce((s, x) => s + (x.total_paise ?? 0), 0);
     setSalesToday({ net: withGst - paid.reduce((s, x) => s + (x.gst_paise ?? 0), 0), withGst });

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { initial, useCafe } from "@/lib/cafe";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -46,9 +46,9 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
               <Link
                 key={l.href}
                 href={l.href}
-                // Don't prefetch: a prefetch made while signed out caches the redirect to /login.
-                prefetch={false}
-                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
+                // Preloaded in the background so tabs open instantly. (This bar only shows when signed
+                // in, and signing in/out reloads the page, so no signed-out redirect gets cached.)
+                className={`relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
                   on ? "bg-white text-[#2a2119] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
                 }`}
               >
@@ -56,6 +56,7 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
                   <path d={l.icon} />
                 </svg>
                 <span className="hidden sm:inline">{l.label}</span>
+                <PendingBar />
               </Link>
             );
           })}
@@ -75,5 +76,18 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
         </div>
       </div>
     </header>
+  );
+}
+
+// A thin bar under a tab while its page is still loading, so a tap always shows a response.
+function PendingBar() {
+  const { pending } = useLinkStatus();
+  return (
+    <span
+      aria-hidden
+      className={`pointer-events-none absolute inset-x-2 bottom-0.5 h-0.5 overflow-hidden rounded-full transition-opacity ${pending ? "opacity-100" : "opacity-0"}`}
+    >
+      <span className="block h-full w-1/2 animate-navbar rounded-full bg-[#2a2119]" />
+    </span>
   );
 }
