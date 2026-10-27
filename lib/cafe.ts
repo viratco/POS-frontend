@@ -20,6 +20,7 @@ export type Cafe = {
   invoice_prefix: string;
   logo_url: string | null;
   qr_logo_url: string | null;
+  floor_plan?: unknown; // see lib/floorPlan.ts (readPlan)
 };
 
 let cached: Promise<Cafe | null> | undefined;

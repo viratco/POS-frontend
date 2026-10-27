@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type KeyboardEvent } from "react";
+import { type FloorPlan, type Side, type Spot, spotNumber } from "@/lib/floorPlan";
 import { billFor, formatINR } from "@/lib/money";
 import type { Order, OrderItem, Table } from "@/lib/types";
 
@@ -14,6 +15,8 @@ interface TableRow {
 }
 
 interface CafeFloorPlanProps {
+  /** This café's room: walls, door, counter and where each table stands. */
+  plan: FloorPlan;
   /** Every active table (not just the filtered ones), so the room never has holes. */
   rows: TableRow[];
   /** Tables matching the current filter; the rest are dimmed. Omit to show all. */
@@ -26,42 +29,6 @@ interface CafeFloorPlanProps {
   onSetupTables?: (names: string[]) => Promise<void>;
 }
 
-/* ───────────────────────── the café, drawn from the owner's sketch ─────────────────────────
-   Units are the sketch's pixels (top view, entrance at the top). Change positions here. */
-
-type Side = "top" | "bottom" | "left" | "right";
-type Spot = { n: number; x: number; y: number; w: number; h: number; chairs: Partial<Record<Side, number>> };
-
-const SPOTS: Spot[] = [
-  { n: 1, x: 890, y: 290, w: 95, h: 66, chairs: { left: 1, right: 1 } },
-  { n: 2, x: 890, y: 432, w: 95, h: 68, chairs: { left: 1, right: 1 } },
-  { n: 3, x: 898, y: 553, w: 107, h: 142, chairs: { left: 2, right: 2 } },
-  { n: 4, x: 637, y: 430, w: 128, h: 95, chairs: { top: 1, bottom: 1 } },
-  { n: 5, x: 432, y: 600, w: 93, h: 92, chairs: { top: 1, bottom: 1 } },
-  { n: 6, x: 897, y: 785, w: 106, h: 100, chairs: { top: 2, bottom: 2 } },
-  { n: 7, x: 675, y: 835, w: 100, h: 75, chairs: { left: 1, right: 1 } },
-  { n: 8, x: 248, y: 768, w: 172, h: 100, chairs: { top: 2, bottom: 2 } },
-  { n: 9, x: 318, y: 995, w: 142, h: 110, chairs: { top: 2, bottom: 2 } },
-  { n: 10, x: 214, y: 1285, w: 93, h: 83, chairs: { top: 1, right: 1 } },
-];
-
-// Crops the open-ended passage on the left; it simply runs off the edge.
-const VIEW = { x: 165, y: 200, w: 890, h: 1215 };
-
-// Outline of the floor, clockwise from the passage at the top-left (open on its left end).
-const FLOOR = "M95,255 L1035,255 L1035,930 L470,930 L470,1395 L190,1395 L190,730 L400,730 L400,445 L95,445 Z";
-const ENTRANCE = { x1: 643, x2: 793, y: 255 };
-const ARCH = { x1: 605, x2: 865, y: 730 }; // wide opening between the main hall and the middle room
-
-const WALLS = [
-  `M95,255 L${ENTRANCE.x1},255`,
-  `M${ENTRANCE.x2},255 L1035,255 L1035,930 L470,930 L470,1395 L190,1395 L190,730 L400,730 L400,445 L95,445`,
-  `M400,730 L${ARCH.x1},730`,
-  `M${ARCH.x2},730 L1035,730`,
-];
-
-const COUNTER = { x: 447, y: 280, w: 145, h: 55 };
-
 /* ───────────────────────── state styling ───────────────────────── */
 
 const LOOK: Record<TableState, { label: string; fill: string; edge: string; chair: string; dot: string }> = {
@@ -71,12 +38,6 @@ const LOOK: Record<TableState, { label: string; fill: string; edge: string; chai
   served: { label: "Served", fill: "#d1fae5", edge: "#059669", chair: "#6ee7b7", dot: "#059669" },
   available: { label: "Free", fill: "#efe3cf", edge: "#b9a586", chair: "#ddd0bb", dot: "#b9a586" },
 };
-
-/** "Table 7" / "table 7" / "T7" / "7" → 7. Anything else (e.g. "Window 1") isn't on the plan. */
-function spotNumber(name: string): number | null {
-  const m = name.trim().match(/^(?:table\s*|t\s*)?(\d{1,2})$/i);
-  return m ? Number(m[1]) : null;
-}
 
 /** Bill so far, or "3 new" while a guest's first order still waits for staff (new items aren't billed yet). */
 function amountLabel(r: TableRow): string {
@@ -88,7 +49,9 @@ function amountLabel(r: TableRow): string {
 
 /* ───────────────────────── component ───────────────────────── */
 
-export default function CafeFloorPlan({ rows, visibleIds, selectedId, onSelectTable, now, ago, onSetupTables }: CafeFloorPlanProps) {
+export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSelectTable, now, ago, onSetupTables }: CafeFloorPlanProps) {
+  const SPOTS = plan.spots;
+  const VIEW = plan.view;
   const [settingUp, setSettingUp] = useState(false);
   const byNumber = new Map<number, TableRow>();
   const offPlan: TableRow[] = [];
@@ -162,34 +125,50 @@ export default function CafeFloorPlan({ rows, visibleIds, selectedId, onSelectTa
 
             {/* outside + floor */}
             <rect x={VIEW.x} y={VIEW.y} width={VIEW.w} height={VIEW.h} fill="url(#grid)" />
-            <path d={FLOOR} fill="#fbf6ee" />
-            <path d={FLOOR} fill="url(#planks)" />
+            {plan.floor.map((d) => (
+              <g key={d}>
+                <path d={d} fill="#fbf6ee" />
+                <path d={d} fill="url(#planks)" />
+              </g>
+            ))}
 
             {/* walls */}
-            {WALLS.map((d) => (
+            {plan.walls.map((d) => (
               <path key={d} d={d} fill="none" stroke="#2a2119" strokeWidth={10} strokeLinecap="square" strokeLinejoin="miter" />
             ))}
 
             {/* entrance: double door swinging in */}
-            <g stroke="#8a7b6b" strokeWidth={2} fill="none">
-              <path d={`M${ENTRANCE.x1},${ENTRANCE.y} L${ENTRANCE.x1},${ENTRANCE.y + 75} A75,75 0 0 0 ${ENTRANCE.x1 + 75},${ENTRANCE.y}`} strokeDasharray="4 5" />
-              <path d={`M${ENTRANCE.x2},${ENTRANCE.y} L${ENTRANCE.x2},${ENTRANCE.y + 75} A75,75 0 0 1 ${ENTRANCE.x2 - 75},${ENTRANCE.y}`} strokeDasharray="4 5" />
-            </g>
-            <text x={(ENTRANCE.x1 + ENTRANCE.x2) / 2} y={ENTRANCE.y - 22} textAnchor="middle" className="fill-[#8a7b6b] text-[17px] font-semibold tracking-[0.2em]">
-              ENTRANCE
-            </text>
-            <path d={`M${(ENTRANCE.x1 + ENTRANCE.x2) / 2 - 9},${ENTRANCE.y - 12} l9,9 l9,-9`} fill="none" stroke="#8a7b6b" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+            {plan.entrance && <Entrance door={plan.entrance} />}
 
-            {/* opening between rooms */}
-            <path d={`M${ARCH.x1},${ARCH.y} L${ARCH.x2},${ARCH.y}`} stroke="#d6c8b2" strokeWidth={2} strokeDasharray="6 7" />
+            {/* openings between rooms */}
+            {plan.openings?.map((o) => (
+              <path key={`${o.x1}-${o.y}`} d={`M${o.x1},${o.y} L${o.x2},${o.y}`} stroke="#d6c8b2" strokeWidth={2} strokeDasharray="6 7" />
+            ))}
+
+            {/* area labels, e.g. TERRACE */}
+            {plan.labels?.map((l) => (
+              <text key={l.text} x={l.x} y={l.y} textAnchor="middle" className="fill-[#b3a28b] text-[16px] font-semibold tracking-[0.25em]">
+                {l.text}
+              </text>
+            ))}
 
             {/* counter */}
-            <g filter="url(#lift)">
-              <rect x={COUNTER.x} y={COUNTER.y} width={COUNTER.w} height={COUNTER.h} rx={10} fill="#2a2119" />
-            </g>
-            <text x={COUNTER.x + COUNTER.w / 2} y={COUNTER.y + COUNTER.h / 2} dy="0.35em" textAnchor="middle" className="fill-[#d9b26f] text-[17px] font-bold tracking-[0.14em]">
-              COUNTER
-            </text>
+            {plan.counter && (
+              <>
+                <g filter="url(#lift)">
+                  <rect x={plan.counter.x} y={plan.counter.y} width={plan.counter.w} height={plan.counter.h} rx={10} fill="#2a2119" />
+                </g>
+                <text
+                  x={plan.counter.x + plan.counter.w / 2}
+                  y={plan.counter.y + plan.counter.h / 2}
+                  dy="0.35em"
+                  textAnchor="middle"
+                  className="fill-[#d9b26f] text-[17px] font-bold tracking-[0.14em]"
+                >
+                  {plan.counter.label ?? "COUNTER"}
+                </text>
+              </>
+            )}
 
             {/* tables */}
             {SPOTS.map((s) => {
@@ -266,7 +245,7 @@ export default function CafeFloorPlan({ rows, visibleIds, selectedId, onSelectTa
         {offPlan.length > 0 && (
           <div className="rounded-3xl border border-dashed border-[#d6c8b2] bg-[#fffdf9] p-4">
             <h3 className="text-sm font-bold text-[#2a2119]">Not on the floor plan</h3>
-            <p className="mt-0.5 text-xs text-[#8a7b6b]">Name a table “Table 1”–“Table 10” to place it.</p>
+            <p className="mt-0.5 text-xs text-[#8a7b6b]">Only tables named “Table 1”, “Table 2”… that have a spot on the plan are drawn.</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {offPlan.map((r) => (
                 <button
@@ -283,6 +262,23 @@ export default function CafeFloorPlan({ rows, visibleIds, selectedId, onSelectTa
         )}
       </aside>
     </div>
+  );
+}
+
+function Entrance({ door: d }: { door: { x1: number; x2: number; y: number } }) {
+  const r = Math.min(75, (d.x2 - d.x1) / 2);
+  const mid = (d.x1 + d.x2) / 2;
+  return (
+    <>
+      <g stroke="#8a7b6b" strokeWidth={2} fill="none">
+        <path d={`M${d.x1},${d.y} L${d.x1},${d.y + r} A${r},${r} 0 0 0 ${d.x1 + r},${d.y}`} strokeDasharray="4 5" />
+        <path d={`M${d.x2},${d.y} L${d.x2},${d.y + r} A${r},${r} 0 0 1 ${d.x2 - r},${d.y}`} strokeDasharray="4 5" />
+      </g>
+      <text x={mid} y={d.y - 22} textAnchor="middle" className="fill-[#8a7b6b] text-[17px] font-semibold tracking-[0.2em]">
+        ENTRANCE
+      </text>
+      <path d={`M${mid - 9},${d.y - 12} l9,9 l9,-9`} fill="none" stroke="#8a7b6b" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+    </>
   );
 }
 

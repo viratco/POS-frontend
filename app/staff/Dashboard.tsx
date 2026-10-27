@@ -7,6 +7,7 @@ import StaffNav from "@/components/StaffNav";
 import { chime } from "@/lib/chime";
 import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } from "@/lib/kitchenWhatsApp";
 import { type Cafe, loadCafe } from "@/lib/cafe";
+import { autoPlan, readPlan, SOHEES_PLAN, spotNumber } from "@/lib/floorPlan";
 import { applyDiscount, billFor, type Discount, formatINR, gstRate } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
@@ -90,9 +91,7 @@ export default function Dashboard() {
   const [filter, setFilter] = useState<Filter>("all");
   const [cafe, setCafe] = useState<Cafe | null>(null);
   const [chosenView, setViewMode] = useState<"floorplan" | "cards">("floorplan");
-  // The drawn floor plan is Sohee's own room layout; other cafés get the card grid.
-  const hasFloorPlan = cafe?.slug === "sohees";
-  const viewMode = hasFloorPlan ? chosenView : "cards";
+  const viewMode = chosenView;
   const [accepting, setAccepting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -177,6 +176,11 @@ export default function Dashboard() {
     const orderItems = order ? (itemsByOrder.get(order.id) ?? []) : undefined;
     return { table: t, order, items: orderItems ?? [], state: stateOf(orderItems), guests: order ? (guestsByOrder.get(order.id) ?? []) : [] };
   });
+
+  // This café's own saved floor plan; Sohee's drawn room; or a tidy grid of its tables.
+  const plan =
+    readPlan(cafe?.floor_plan) ??
+    (cafe?.slug === "sohees" ? SOHEES_PLAN : autoPlan(tables.map((t) => spotNumber(t.name)).filter((n): n is number => n != null)));
 
   const waitingOrders = rows
     .map((r) => ({ ...r, waiting: r.items.filter((i) => i.status === "new") }))
@@ -395,7 +399,7 @@ export default function Dashboard() {
 
             <div className="flex flex-wrap items-center gap-2">
               {/* View Switcher: Cards vs Floor Plan */}
-              {hasFloorPlan && (
+              {(
               <div className="flex items-center rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
                 <button
                   onClick={() => setViewMode("cards")}
@@ -456,6 +460,7 @@ export default function Dashboard() {
           {viewMode === "floorplan" ? (
             <div className="mt-4">
               <CafeFloorPlan
+                plan={plan}
                 rows={rows}
                 visibleIds={filter === "all" ? undefined : new Set(visibleRows.map((r) => r.table.id))}
                 selectedId={selectedId}

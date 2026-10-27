@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { type FloorPlan, SOHEES_PLAN } from "@/lib/floorPlan";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
 import type { Order, OrderItem, Table } from "@/lib/types";
 
@@ -27,7 +28,7 @@ function ago(iso: string, now: number) {
 
 const STATUS: Record<State, OrderItem["status"]> = { available: "served", new_order: "new", food_ready: "ready", in_kitchen: "pending", served: "served" };
 
-export default function FloorPlanDemo() {
+export default function FloorPlanDemo({ plan = SOHEES_PLAN }: { plan?: FloorPlan }) {
   const [now, setNow] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -51,7 +52,7 @@ export default function FloorPlanDemo() {
       <p className="mb-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
         Floor plan preview with made-up tables — development only. Selected: {selected ?? "none"}
       </p>
-      <CafeFloorPlan rows={rows} selectedId={selected} onSelectTable={setSelected} now={now} ago={ago} onSetupTables={async () => alert("Would create the missing tables")} />
+      <CafeFloorPlan plan={plan} rows={rows} selectedId={selected} onSelectTable={setSelected} now={now} ago={ago} onSetupTables={async () => alert("Would create the missing tables")} />
     </main>
   );
 }
