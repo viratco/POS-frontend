@@ -65,7 +65,9 @@ export function autoPlan(tableNumbers: number[]): FloorPlan {
   return {
     view: { x: left - 40, y: top - 60, w: right - left + 80, h: bottom - top + 100 },
     floor: [`M${left},${top} L${right},${top} L${right},${bottom} L${left},${bottom} Z`],
-    walls: [`M${left},${top} L${door.x1},${top}`, `M${door.x2},${top} L${right},${top} L${right},${bottom} L${left},${bottom} Z`],
+    // Around the room from the right of the door, ending at the top-left corner (not closed with Z,
+    // which would draw a line straight back to the door).
+    walls: [`M${left},${top} L${door.x1},${top}`, `M${door.x2},${top} L${right},${top} L${right},${bottom} L${left},${bottom} L${left},${top}`],
     entrance: door,
     counter: { x: left + inset, y: top + 30, w: 200, h: 56 },
     spots: nums.map((n, i) => ({
