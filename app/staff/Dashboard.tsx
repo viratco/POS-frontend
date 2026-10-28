@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DietMark } from "@/components/MenuMarks";
+import OfflineBar from "@/components/OfflineBar";
+import PrintSheet, { type PrintJob } from "@/components/PrintSheet";
 import SoundToggle from "@/components/SoundToggle";
 import StaffNav from "@/components/StaffNav";
 import { chime } from "@/lib/chime";
@@ -9,6 +12,11 @@ import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } fr
 import { type Cafe, loadCafe } from "@/lib/cafe";
 import { autoPlan, readPlan, SOHEES_PLAN, spotNumber } from "@/lib/floorPlan";
 import { applyDiscount, billFor, type Discount, formatINR, gstRate } from "@/lib/money";
+import { applyActions, localDay } from "@/lib/offline/apply";
+import { checkConnection, isNetworkError, reportNetworkFailure, useOnline } from "@/lib/offline/net";
+import { enqueue, readIdMap, readMenu, readProblems, readQueue, readSnapshot, saveMenu, saveProblems, saveSnapshot } from "@/lib/offline/store";
+import { checkIn, execute, newId, nextOfflineInvoice, type Outcome, outcomeOf, sendQueue } from "@/lib/offline/sync";
+import type { Action, AddLine, OpenOrder, Problem, Receipt, Snapshot } from "@/lib/offline/types";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
 import type { Category, Guest, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
@@ -48,25 +56,50 @@ function friendlyError(msg: string) {
 }
 
 // Opens a printable view in a new tab; call directly from a click handler.
-// Reject a QR order's waiting dishes. If that leaves nothing else on the table,
-// the empty order is closed too, so the table shows as free again.
-async function rejectWaiting(
-  supabase: ReturnType<typeof supabaseBrowser>,
-  orderId: string,
-  waiting: OrderItem[],
-  all: OrderItem[],
-) {
-  const ids = waiting.map((i) => i.id);
-  const res = await supabase.from("order_items").update({ status: "void" }).in("id", ids);
-  if (res.error) return { error: res.error, emptied: false };
-  if (all.some((i) => i.status !== "void" && !ids.includes(i.id))) return { error: null, emptied: false };
-  const done = await supabase.from("orders").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", orderId);
-  return { error: done.error, emptied: !done.error };
-}
-
 function openPrint(orderId: string, type: "bill" | "receipt" | "kot") {
   window.open(`/staff/print/${orderId}?type=${type}&auto=1`, "_blank");
 }
+
+// A server action's reply (or its failure to arrive) as an Outcome. A throw means the request
+// never got an answer, which is safe to send again because every change carries its own ids.
+async function viaAction(call: () => Promise<{ ok: true } | { ok: false; error: string; code?: string; status: number }>): Promise<Outcome> {
+  try {
+    const r = await call();
+    return r.ok ? { ok: true, data: r } : outcomeOf({ message: r.error, code: r.code }, r.status);
+  } catch {
+    return { ok: false, retry: true, message: "No connection" };
+  }
+}
+
+type Menu = { categories: Category[]; menu: MenuItem[] };
+
+// The menu for "Add items": the saved copy straight away, then the server's when it answers
+// (and that is saved for next time). show(null) = nothing saved and no connection.
+async function loadMenu(supabase: SupabaseClient, cafeId: string | undefined, online: boolean, show?: (m: Menu | null) => void) {
+  const saved = cafeId ? await readMenu(cafeId) : undefined;
+  if (saved) show?.(saved);
+  if (online) {
+    const timeout = AbortSignal.timeout(10_000);
+    const [c, m] = await Promise.all([
+      supabase.from("menu_categories").select("*").order("sort_order").abortSignal(timeout),
+      supabase.from("menu_items").select("*").eq("is_available", true).order("sort_order").abortSignal(timeout),
+    ]);
+    if (!c.error && !m.error) {
+      const fresh = {
+        categories: (c.data ?? []) as Category[],
+        menu: ((m.data ?? []) as MenuItem[]).map((i) => ({ ...i, options: Array.isArray(i.options) ? i.options : [] })),
+      };
+      if (cafeId) void saveMenu({ cafeId, ...fresh });
+      show?.(fresh);
+      return;
+    }
+  }
+  if (!saved) show?.(null);
+}
+
+// What the counter needs to act on a table, online or not.
+type Act = (action: Action, live?: () => Promise<Outcome>) => Promise<{ error: string | null; queued: boolean }>;
+type Stamp = { id: string; cafeId: string; at: string };
 
 function ago(iso: string, now: number) {
   const m = Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60_000));
@@ -81,12 +114,28 @@ type Filter = "all" | "action" | "occupied" | "available";
 
 export default function Dashboard() {
   const supabase = supabaseBrowser();
-  const [tables, setTables] = useState<Table[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [items, setItems] = useState<OrderItem[]>([]);
+  const online = useOnline();
+  // The last copy from the server (kept on this device), and the changes made here that the
+  // server hasn't got yet. The screen shows the two together, so it works the same offline.
+  const [base, setBase] = useState<Snapshot | null>(null);
+  const [queue, setQueue] = useState<Action[]>([]);
+  const [idMap, setIdMap] = useState<Record<string, string>>({});
+  const [problems, setProblems] = useState<Problem[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [waitingReason, setWaitingReason] = useState<string | null>(null);
+  const [noCopy, setNoCopy] = useState(false); // offline, and this device never loaded the tables
+  const [signedOut, setSignedOut] = useState(false);
+  const [sendNow, setSendNow] = useState(0); // bumped to send the queue right away
+  const [printJob, setPrintJob] = useState<PrintJob | null>(null);
+  const hasBase = useRef(false);
+  const wasOffline = useRef(false);
+  const view = useMemo(() => (base ? applyActions(base, queue, idMap) : null), [base, queue, idMap]);
+  const tables = useMemo(() => view?.tables ?? [], [view]);
+  const orders = useMemo(() => view?.orders ?? [], [view]);
+  const items = useMemo(() => orders.flatMap((o) => o.order_items), [orders]);
+  const guests = useMemo(() => orders.flatMap((o) => o.order_guests), [orders]);
   // Today's paid bills, counted the same way as Analytics: net = before GST.
-  const [salesToday, setSalesToday] = useState({ net: 0, withGst: 0 });
-  const [guests, setGuests] = useState<Guest[]>([]);
+  const salesToday = view?.sales ?? { net: 0, withGst: 0 };
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [cafe, setCafe] = useState<Cafe | null>(null);
@@ -108,9 +157,38 @@ export default function Dashboard() {
     });
   }
 
+  // This device's queue, id map and problem list for the café.
+  const readLocal = useCallback(async (cafeId: string) => {
+    const [q, m, p] = await Promise.all([readQueue(cafeId), readIdMap(cafeId), readProblems(cafeId)]);
+    return { q, m, p };
+  }, []);
+
   const load = useCallback(async () => {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
+    // Signed out (session ended): the database would answer with nothing. Keep showing the
+    // saved copy, and keep this device's unsent changes for when staff sign in again.
+    const { data: auth } = await supabase.auth.getSession();
+    if (!auth.session) {
+      setSignedOut(true);
+      const c = await loadCafe();
+      if (c && !hasBase.current) {
+        const saved = await readSnapshot(c.id);
+        if (saved) {
+          hasBase.current = true;
+          setBase(saved);
+        }
+      }
+      if (c) {
+        const local = await readLocal(c.id);
+        setCafe(c);
+        setQueue(local.q);
+        setIdMap(local.m);
+        setProblems(local.p);
+      }
+      return;
+    }
+    setSignedOut(false);
     // The café loads first-time only (cached); its GST rate is needed for the totals below.
     const [c, t, o, p] = await Promise.all([
       loadCafe(),
@@ -124,22 +202,57 @@ export default function Dashboard() {
         .order("created_at", { referencedTable: "order_guests" }),
       supabase.from("orders").select("total_paise, gst_paise").eq("status", "paid").gte("closed_at", startOfDay.toISOString()),
     ]);
-    if (t.error || o.error) {
-      setError((t.error ?? o.error)!.message);
+    const failed = t.error ?? o.error ?? p.error;
+    if (failed && !isNetworkError(failed) && t.status !== 0 && o.status !== 0) {
+      setError(failed.message);
       return;
     }
-    type OpenOrder = Order & { order_items: OrderItem[]; order_guests: Guest[] };
+
+    if (failed) {
+      // No internet: carry on from the copy saved on this device.
+      reportNetworkFailure();
+      if (!c) {
+        if (!hasBase.current) setNoCopy(true);
+        return;
+      }
+      const [saved, local] = await Promise.all([hasBase.current ? null : readSnapshot(c.id), readLocal(c.id)]);
+      setCafe(c);
+      if (saved) {
+        hasBase.current = true;
+        setBase(saved);
+      }
+      setNoCopy(!hasBase.current);
+      setQueue(local.q);
+      setIdMap(local.m);
+      setProblems(local.p);
+      return;
+    }
+
     const open = (o.data ?? []) as OpenOrder[];
-    setError(null);
-    setCafe(c);
-    setTables((t.data ?? []) as Table[]);
-    setOrders(open);
-    setItems(open.flatMap((x) => x.order_items ?? []));
-    setGuests(open.flatMap((x) => x.order_guests ?? []));
     const paid = (p.data ?? []) as { total_paise: number | null; gst_paise: number | null }[];
     const withGst = paid.reduce((s, x) => s + (x.total_paise ?? 0), 0);
-    setSalesToday({ net: withGst - paid.reduce((s, x) => s + (x.gst_paise ?? 0), 0), withGst });
-  }, [supabase]);
+    const snap: Snapshot = {
+      cafeId: c?.id ?? "",
+      savedAt: new Date().toISOString(),
+      day: localDay(startOfDay),
+      tables: (t.data ?? []) as Table[],
+      orders: open.map((x) => ({ ...x, order_items: x.order_items ?? [], order_guests: x.order_guests ?? [] })),
+      sales: { net: withGst - paid.reduce((s, x) => s + (x.gst_paise ?? 0), 0), withGst },
+    };
+    if (c) void saveSnapshot(snap);
+    const local = c ? await readLocal(c.id) : null;
+    // All at once, so the screen never lays a sent change over a copy that already has it.
+    hasBase.current = true;
+    setError(null);
+    setNoCopy(false);
+    setCafe(c);
+    setBase(snap);
+    if (local) {
+      setQueue(local.q);
+      setIdMap(local.m);
+      setProblems(local.p);
+    }
+  }, [supabase, readLocal]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -153,11 +266,95 @@ export default function Dashboard() {
     if (item.source === "staff") return;
     chime();
   });
+  // The live feed dropping is often the first sign the internet is gone: check now.
+  useEffect(() => {
+    if (!live) checkConnection();
+  }, [live]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 2600);
   }, []);
+
+  const cafeId = cafe?.id;
+
+  // Internet back (or a new change while online): send what's queued, oldest first.
+  useEffect(() => {
+    if (!online) {
+      wasOffline.current = true;
+      return;
+    }
+    if (!cafeId) return;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    void (async () => {
+      const pending = await readQueue(cafeId);
+      const cameBack = wasOffline.current;
+      wasOffline.current = false;
+      if (pending.length === 0) {
+        setWaitingReason(null);
+        if (cameBack) void load();
+        return;
+      }
+      setSyncing(true);
+      const r = await sendQueue(cafeId, supabase);
+      setSyncing(false);
+      setWaitingReason(r.waiting);
+      await load();
+      if (r.sent > 0 && !r.waiting) showToast(`✓ All saved · ${r.sent} offline change${r.sent === 1 ? "" : "s"} sent`);
+      // Paused for a reason other than the connection: try again in a while.
+      if (r.waiting && r.waiting !== "No connection") retry = setTimeout(() => setSendNow((n) => n + 1), 30_000);
+    })();
+    return () => clearTimeout(retry);
+  }, [online, cafeId, sendNow, supabase, load, showToast]);
+
+  // While online: check in every minute (keeps this device's invoice series ready for offline
+  // bills, and tells the guest QR page the counter is here), and keep the menu copy fresh.
+  useEffect(() => {
+    if (!online || !cafeId) return;
+    void checkIn(cafeId, supabase);
+    void loadMenu(supabase, cafeId, true);
+    const t = setInterval(() => void checkIn(cafeId, supabase), 60_000);
+    return () => clearInterval(t);
+  }, [online, cafeId, supabase]);
+
+  // Does a change now (online), or saves it to send later (offline, or while older changes
+  // are still waiting, so they reach the server in the order they happened).
+  const queueUp = useCallback(
+    async (action: Action) => {
+      if (!(await enqueue(action))) return { error: "No internet, and this browser can't save changes offline. Try again when online.", queued: false };
+      const local = await readLocal(action.cafeId);
+      setQueue(local.q);
+      setIdMap(local.m);
+      setSendNow((n) => n + 1);
+      return { error: null, queued: true };
+    },
+    [readLocal],
+  );
+  const act: Act = useCallback(
+    async (action, live) => {
+      if (online && queue.length === 0) {
+        const out = live ? await live() : await execute(action, supabase, { ...idMap });
+        if (out.ok) {
+          void load();
+          return { error: null, queued: false };
+        }
+        if (!out.retry) return { error: `Couldn't do that: ${out.message}`, queued: false };
+        if (out.message === "No connection") reportNetworkFailure();
+      }
+      return queueUp(action);
+    },
+    [online, queue.length, supabase, idMap, load, queueUp],
+  );
+
+  // Every change gets its own id and the moment it happened.
+  const stamp = useCallback((): Stamp => ({ id: newId(), cafeId: cafeId ?? "", at: new Date().toISOString() }), [cafeId]);
+  const printHere = !online || queue.length > 0; // the order may not be on the server yet
+
+  async function dismissProblems() {
+    if (!cafeId) return;
+    await saveProblems(cafeId, []);
+    setProblems([]);
+  }
 
   const openByTable = useMemo(() => new Map(orders.map((o) => [o.table_id, o])), [orders]);
   const itemsByOrder = useMemo(() => {
@@ -206,6 +403,10 @@ export default function Dashboard() {
 
   // Floor-plan spots with no table yet: create them, or re-activate one that was switched off.
   async function setupTables(names: string[]) {
+    if (!online) {
+      setError("Adding tables needs the internet. Try again when you're back online.");
+      return;
+    }
     const { error } = await supabase
       .from("tables")
       .upsert(names.map((name) => ({ name, is_active: true, sort_order: Number(name.replace(/\D/g, "")) * 10 })), { onConflict: "cafe_id,name" });
@@ -219,20 +420,119 @@ export default function Dashboard() {
 
   async function accept(orderId: string, tableName: string, waiting: OrderItem[]) {
     // Open WhatsApp before any await, while we're still inside the tap (or browsers block it).
-    if (waOn) openWhatsApp(kitchenTicket(tableName, waiting, "qr"));
+    const wa = waOn && online;
+    if (wa) openWhatsApp(kitchenTicket(tableName, waiting, "qr"));
     setAccepting(orderId);
-    const res = await acceptOrder(orderId);
+    const itemIds = waiting.map((i) => i.id);
+    const res = await act({ ...stamp(), kind: "accept", tableName, orderId, itemIds }, () => viaAction(() => acceptOrder(orderId, itemIds)));
     setAccepting(null);
-    if (!res.ok) setError(res.error);
-    else showToast(waOn ? `✓ ${tableName} accepted · now tap Send in WhatsApp` : `✓ ${tableName} sent to kitchen`);
-    void load();
+    if (res.error) setError(res.error);
+    else if (res.queued) {
+      // The kitchen screen is offline too: it gets a printed slip.
+      setPrintJob({ kind: "kot", tableName, items: waiting });
+      showToast(`✓ ${tableName} accepted · give the kitchen slip to the kitchen`);
+    } else showToast(wa ? `✓ ${tableName} accepted · now tap Send in WhatsApp` : `✓ ${tableName} sent to kitchen`);
   }
 
-  async function reject(orderId: string, tableName: string, waiting: OrderItem[], all: OrderItem[]) {
-    const { error } = await rejectWaiting(supabase, orderId, waiting, all);
-    if (error) setError(error.message);
+  // Reject a QR order's waiting dishes. If that leaves nothing else on the table,
+  // the empty order is closed too, so the table shows as free again.
+  async function reject(orderId: string, tableName: string, waiting: OrderItem[]) {
+    const res = await act({ ...stamp(), kind: "reject", tableName, orderId, itemIds: waiting.map((i) => i.id) });
+    if (res.error) setError(res.error);
     else showToast(`${tableName} order rejected`);
-    void load();
+  }
+
+  // Staff add dishes to a table (opening a new order if it's free).
+  async function addItems(table: Table, order: Order | null, lines: AddLine[]) {
+    const orderId = order?.id ?? newId();
+    const res = await act({ ...stamp(), kind: "add", tableName: table.name, tableId: table.id, orderId, lines }, () =>
+      viaAction(() =>
+        staffAddItems(
+          table.id,
+          lines.map((l) => ({ id: l.id, menu_item_id: l.menu_item_id, qty: l.qty, note: l.note, options: l.options.map(({ group, name }) => ({ group, name })) })),
+          orderId,
+        ),
+      ),
+    );
+    if (res.queued) {
+      // Offline, the kitchen only knows from paper.
+      setPrintJob({
+        kind: "kot",
+        tableName: table.name,
+        items: lines.map((l) => ({
+          id: l.id,
+          order_id: orderId,
+          menu_item_id: l.menu_item_id,
+          name_snapshot: l.name,
+          price_paise_snapshot: l.price,
+          qty: l.qty,
+          note: l.note,
+          status: "pending",
+          source: "staff",
+          created_at: new Date().toISOString(),
+          accepted_at: null,
+          ready_at: null,
+          options: l.options,
+        })),
+      });
+    }
+    return res;
+  }
+
+  // Take payment. Online: the server closes the bill and numbers it. Offline: this device numbers
+  // it from its own series (so the printed invoice is final) and the bill is sent later.
+  async function pay(table: Table, order: Order, orderItems: OrderItem[], method: "upi" | "cash", discount: Discount) {
+    if (online && queue.length === 0) {
+      // Discount params only when there is one, so plain payments work with older databases too.
+      const { data, error, status } = await supabase
+        .rpc("close_order", {
+          p_order_id: order.id,
+          p_method: method,
+          p_gst_rate_bps: gstRate(),
+          ...(discount ? { p_discount_type: discount.type, p_discount_value: discount.value, p_discount_reason: discount.reason || null } : {}),
+        })
+        .abortSignal(AbortSignal.timeout(15_000));
+      const out = outcomeOf(error, status, data);
+      if (out.ok) {
+        void load();
+        return { order: data as Order, receipt: null };
+      }
+      if (!out.retry) return { error: error?.message === "invalid_discount" ? "That discount isn't valid." : friendlyError(error?.message ?? out.message) };
+      reportNetworkFailure();
+    }
+    if (!cafeId) return { error: "No internet, and this device has no saved copy of the café yet." };
+
+    const billed = orderItems.filter((i) => i.status !== "void" && i.status !== "new");
+    const rateBps = gstRate();
+    const fin = applyDiscount(billFor(billed, rateBps).subtotal, discount, rateBps);
+    const at = new Date();
+    const { invoiceNo, deviceId } = fin.total > 0 ? await nextOfflineInvoice(cafeId, cafe?.invoice_prefix ?? "", at) : { invoiceNo: null, deviceId: null };
+    const receipt: Receipt = {
+      tableName: table.name,
+      invoiceNo,
+      closedAt: at.toISOString(),
+      method,
+      items: billed,
+      subtotal: fin.subtotal,
+      discount: fin.discount,
+      discountReason: fin.discount > 0 ? discount?.reason || null : null,
+      rateBps,
+      gst: fin.gst,
+      total: fin.total,
+    };
+    const res = await queueUp({
+      ...stamp(),
+      at: receipt.closedAt,
+      kind: "close",
+      tableName: table.name,
+      orderId: order.id,
+      method,
+      itemIds: billed.map((i) => i.id),
+      discount,
+      deviceId,
+      receipt,
+    });
+    return res.error ? { error: res.error } : { order: null, receipt };
   }
 
   const selected = rows.find((r) => r.table.id === selectedId) ?? null;
@@ -241,18 +541,54 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#faf7f2] text-[#2a2119]">
       <StaffNav>
         <span
-          className={`hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold sm:flex ${
-            live ? "bg-emerald-100/80 text-emerald-800 ring-1 ring-emerald-300" : "bg-red-100/80 text-red-800 ring-1 ring-red-300"
+          className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+            !online
+              ? "bg-amber-100/90 text-amber-900 ring-1 ring-amber-300"
+              : live
+                ? "hidden bg-emerald-100/80 text-emerald-800 ring-1 ring-emerald-300 sm:flex"
+                : "hidden bg-red-100/80 text-red-800 ring-1 ring-red-300 sm:flex"
           }`}
         >
-          <span className={`h-1.5 w-1.5 rounded-full ${live ? "bg-emerald-500" : "animate-pulse bg-red-500"}`} />
-          {live ? "Live" : "Reconnecting…"}
+          <span className={`h-1.5 w-1.5 rounded-full ${!online ? "animate-pulse bg-amber-500" : live ? "bg-emerald-500" : "animate-pulse bg-red-500"}`} />
+          {!online ? `Offline${queue.length ? ` · ${queue.length}` : ""}` : live ? "Live" : "Reconnecting…"}
         </span>
         <WhatsAppToggle on={waOn} onToggle={toggleWa} />
         <SoundToggle />
       </StaffNav>
 
       <main className="mx-auto max-w-[1400px] px-4 pt-5 pb-16 sm:px-6">
+        <div className={!online || queue.length > 0 || problems.length > 0 ? "mb-4" : ""}>
+          <OfflineBar
+            online={online}
+            pending={queue.length}
+            syncing={syncing}
+            waiting={waitingReason}
+            savedAt={base?.savedAt ?? null}
+            problems={problems}
+            onDismissProblems={dismissProblems}
+          />
+        </div>
+
+        {signedOut && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-300 bg-rose-50 px-4 py-3 text-rose-900">
+            <span className="text-sm font-semibold">
+              This device was signed out.{queue.length > 0 ? ` ${queue.length} change${queue.length === 1 ? "" : "s"} made offline are kept here and will be sent once you sign in.` : ""}
+            </span>
+            <a href="/login?next=/staff" className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white">
+              Sign in
+            </a>
+          </div>
+        )}
+
+        {noCopy && (
+          <div className="mb-4 rounded-2xl bg-white px-5 py-8 text-center ring-1 ring-[#ded3c2]">
+            <p className="text-lg font-bold">No internet, and this device has no saved copy of your tables yet.</p>
+            <p className="mt-1 text-sm text-[#8a7b6b]">
+              Open this page once with internet on this device; after that it keeps working offline. Meanwhile, use a phone hotspot or take orders on paper.
+            </p>
+          </div>
+        )}
+
         {error && (
           <div className="mb-4 flex items-center justify-between rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-red-200">
             {error}
@@ -336,7 +672,7 @@ export default function Dashboard() {
               <span className="text-xs font-medium text-rose-700">Check the guests are seated, then accept to dispatch</span>
             </div>
             <div className="mt-3.5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {waitingOrders.map(({ order, table, waiting, items: orderItems, guests: who }) => (
+              {waitingOrders.map(({ order, table, waiting, guests: who }) => (
                 <div key={order!.id} className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm ring-2 ring-rose-200/50">
                   <div>
                     <div className="flex items-baseline justify-between border-b border-rose-100 pb-2">
@@ -372,7 +708,7 @@ export default function Dashboard() {
                     </button>
                     <ConfirmButton
                       disabled={accepting === order!.id}
-                      onConfirm={() => reject(order!.id, table.name, waiting, orderItems)}
+                      onConfirm={() => reject(order!.id, table.name, waiting)}
                       className="h-11 rounded-xl px-3 text-xs font-semibold text-stone-500 ring-1 ring-stone-200 transition hover:bg-stone-50"
                       armedClassName="h-11 rounded-xl bg-red-600 px-3 text-xs font-bold text-white shadow-sm"
                     >
@@ -498,15 +834,25 @@ export default function Dashboard() {
           onAccept={(waiting) => selected.order && accept(selected.order.id, selected.table.name, waiting)}
           waOn={waOn}
           onClose={() => setSelectedId(null)}
-          onChanged={load}
           toast={showToast}
           allRows={rows}
           onMoved={(toTableId) => {
             setSelectedId(toTableId);
             void load();
           }}
+          online={online}
+          canMove={online && queue.length === 0}
+          printHere={printHere}
+          act={act}
+          stamp={stamp}
+          onPrint={setPrintJob}
+          onAdd={(lines) => addItems(selected.table, selected.order, lines)}
+          onPay={(method, discount) => pay(selected.table, selected.order!, selected.items, method, discount)}
+          loadMenu={(show) => loadMenu(supabase, cafeId, online, show)}
         />
       )}
+
+      {printJob && <PrintSheet job={printJob} cafe={cafe} onClose={() => setPrintJob(null)} />}
 
       {toast && (
         <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 animate-toast rounded-full bg-[#2a2119] px-5 py-3 text-sm font-semibold whitespace-nowrap text-[#f5ebd9] shadow-xl">
@@ -735,10 +1081,18 @@ function TableDrawer({
   onAccept,
   waOn,
   onClose,
-  onChanged,
   toast,
   allRows,
   onMoved,
+  online,
+  canMove,
+  printHere,
+  act,
+  stamp,
+  onPrint,
+  onAdd,
+  onPay,
+  loadMenu,
 }: {
   table: Table;
   order: Order | null;
@@ -750,16 +1104,25 @@ function TableDrawer({
   onAccept: (waiting: OrderItem[]) => void;
   waOn: boolean;
   onClose: () => void;
-  onChanged: () => void;
   toast: (msg: string) => void;
   allRows: { table: Table; order: Order | null; items: OrderItem[]; guests: Guest[] }[];
   onMoved: (toTableId: string) => void;
+  online: boolean;
+  canMove: boolean; // moving tables needs the internet
+  printHere: boolean; // print from this screen (offline) instead of a new tab
+  act: Act;
+  stamp: () => Stamp;
+  onPrint: (job: PrintJob) => void;
+  onAdd: (lines: AddLine[]) => Promise<{ error: string | null; queued: boolean }>;
+  onPay: (method: "upi" | "cash", discount: Discount) => Promise<{ error: string } | { order: Order | null; receipt: Receipt | null }>;
+  loadMenu: (show: (m: Menu | null) => void) => Promise<void>;
 }) {
-  const supabase = supabaseBrowser();
   const [adding, setAdding] = useState(false);
   const [moving, setMoving] = useState(false);
   // The order being charged; kept even after the table frees up, so the receipt can print.
   const [paying, setPaying] = useState<Order | null>(null);
+  // A bill paid offline: printed from this screen.
+  const [paidReceipt, setPaidReceipt] = useState<Receipt | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -778,27 +1141,29 @@ function TableDrawer({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  async function run(fn: () => PromiseLike<{ error: { message: string } | null }>, done?: string) {
+  async function run(fn: () => Promise<{ error: string | null }>, done?: string) {
     setBusy(true);
     setError(null);
     const { error } = await fn();
     setBusy(false);
-    if (error) setError(friendlyError(error.message));
+    if (error) setError(friendlyError(error));
     else if (done) toast(done);
-    onChanged();
     return !error;
   }
 
-  const setStatus = (ids: string[], status: OrderItem["status"], done?: string) =>
-    run(() => supabase.from("order_items").update({ status }).in("id", ids), done);
+  const setStatus = (ids: string[], status: "served" | "void", done?: string) =>
+    order && run(() => act({ ...stamp(), kind: "status", tableName: table.name, orderId: order.id, itemIds: ids, status }), done);
 
   async function cancelOrder() {
     if (!order || !confirm(`Cancel the whole order for ${table.name}? Nothing will be billed. This can't be undone.`)) return;
-    const ok = await run(
-      () => supabase.from("orders").update({ status: "cancelled", closed_at: new Date().toISOString() }).eq("id", order.id),
-      `${table.name} order cancelled`,
-    );
+    const ok = await run(() => act({ ...stamp(), kind: "cancel", tableName: table.name, orderId: order.id }), `${table.name} order cancelled`);
     if (ok) onClose();
+  }
+
+  function print(kind: "bill" | "kot") {
+    if (!order) return;
+    if (!printHere) return openPrint(order.id, kind);
+    onPrint(kind === "kot" ? { kind, tableName: table.name, items: cooking } : { kind, tableName: table.name, order, items });
   }
 
   const liveQty = items.filter((i) => i.status !== "void").reduce((n, i) => n + i.qty, 0);
@@ -867,13 +1232,10 @@ function TableDrawer({
                 <ConfirmButton
                   disabled={accepting || busy}
                   onConfirm={async () => {
-                    let emptied = false;
-                    await run(async () => {
-                      const r = await rejectWaiting(supabase, order!.id, waiting, items);
-                      emptied = r.emptied;
-                      return r;
-                    }, "Order rejected");
-                    if (emptied) onClose();
+                    const ids = waiting.map((i) => i.id);
+                    const emptied = !items.some((i) => i.status !== "void" && !ids.includes(i.id));
+                    const ok = await run(() => act({ ...stamp(), kind: "reject", tableName: table.name, orderId: order!.id, itemIds: ids }), "Order rejected");
+                    if (ok && emptied) onClose();
                   }}
                   className="h-12 rounded-xl bg-white px-4 font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50"
                   armedClassName="h-12 rounded-xl bg-red-600 px-4 font-bold text-white shadow-sm"
@@ -925,17 +1287,19 @@ function TableDrawer({
               action={
                 <div className="flex gap-1.5">
                   <button
-                    onClick={() => order && openPrint(order.id, "kot")}
+                    onClick={() => print("kot")}
                     className="rounded-lg px-2.5 py-1 text-xs font-bold text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
                   >
                     🖨 KOT
                   </button>
-                  <button
-                    onClick={() => openWhatsApp(kitchenTicket(table.name, cooking, "qr").replace("NEW ORDER", "REMINDER"))}
-                    className="rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
-                  >
-                    Resend on WhatsApp
-                  </button>
+                  {online && (
+                    <button
+                      onClick={() => openWhatsApp(kitchenTicket(table.name, cooking, "qr").replace("NEW ORDER", "REMINDER"))}
+                      className="rounded-lg px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-50"
+                    >
+                      Resend on WhatsApp
+                    </button>
+                  )}
                 </div>
               }
             >
@@ -993,7 +1357,7 @@ function TableDrawer({
               </button>
               <button
                 disabled={bill.subtotal === 0}
-                onClick={() => openPrint(order.id, "bill")}
+                onClick={() => print("bill")}
                 title="Print the bill for the guest"
                 className="h-14 rounded-xl px-4 font-bold text-stone-800 ring-1 ring-stone-300 transition hover:bg-stone-50 disabled:opacity-40"
               >
@@ -1010,11 +1374,12 @@ function TableDrawer({
             </div>
             <div className="mt-3 flex items-center justify-between">
               <button
-                disabled={busy}
+                disabled={busy || !canMove}
                 onClick={() => setMoving(true)}
-                className="rounded-lg px-3 py-1.5 text-sm font-semibold text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50"
+                title={canMove ? undefined : "Moving tables needs the internet"}
+                className="rounded-lg px-3 py-1.5 text-sm font-semibold text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50 disabled:opacity-40"
               >
-                ⇄ Move to another table
+                ⇄ Move to another table{canMove ? "" : " (online only)"}
               </button>
               <button disabled={busy} onClick={cancelOrder} className="text-sm font-medium text-stone-400 hover:text-red-600">
                 Cancel this order
@@ -1042,14 +1407,14 @@ function TableDrawer({
 
       {adding && (
         <AddItemsModal
-          tableId={table.id}
           tableName={table.name}
-          waOn={waOn}
+          waOn={waOn && online}
+          loadMenu={loadMenu}
+          onSend={onAdd}
           onClose={() => setAdding(false)}
-          onAdded={(n) => {
+          onAdded={(n, queued) => {
             setAdding(false);
-            toast(`✓ ${n} item${n > 1 ? "s" : ""} sent to kitchen`);
-            onChanged();
+            toast(queued ? `✓ ${n} item${n > 1 ? "s" : ""} saved · give the kitchen slip to the kitchen` : `✓ ${n} item${n > 1 ? "s" : ""} sent to kitchen`);
           }}
         />
       )}
@@ -1064,26 +1429,25 @@ function TableDrawer({
           onPay={async (method, discount) => {
             setBusy(true);
             setError(null);
-            // Discount params only when there is one, so plain payments work with older databases too.
-            const { data, error } = await supabase.rpc("close_order", {
-              p_order_id: paying.id,
-              p_method: method,
-              p_gst_rate_bps: gstRate(),
-              ...(discount
-                ? { p_discount_type: discount.type, p_discount_value: discount.value, p_discount_reason: discount.reason || null }
-                : {}),
-            });
+            const res = await onPay(method, discount);
             setBusy(false);
-            onChanged();
-            if (error) {
-              setError(error.message === "invalid_discount" ? "That discount isn't valid." : friendlyError(error.message));
+            if ("error" in res) {
+              setError(res.error);
               return null;
             }
-            const total = (data as Order).total_paise ?? 0;
-            toast(total === 0 ? `✓ ${table.name} closed as complimentary` : `✓ ${table.name} paid by ${method === "upi" ? "UPI" : "cash"} · table is free`);
+            setPaidReceipt(res.receipt);
+            const total = res.receipt?.total ?? res.order?.total_paise ?? 0;
+            const how = method === "upi" ? "UPI" : "cash";
+            toast(
+              total === 0
+                ? `✓ ${table.name} closed as complimentary`
+                : res.receipt
+                  ? `✓ ${table.name} paid by ${how} · saved on this device`
+                  : `✓ ${table.name} paid by ${how} · table is free`,
+            );
             return total;
           }}
-          onPrintReceipt={() => openPrint(paying.id, "receipt")}
+          onPrintReceipt={() => (paidReceipt ? onPrint({ kind: "receipt", receipt: paidReceipt }) : openPrint(paying.id, "receipt"))}
           onDone={() => {
             setPaying(null);
             onClose();
@@ -1483,19 +1847,20 @@ function PaymentModal({
 type Pick = { itemId: string; qty: number; note: string; options: PickedOption[] };
 
 export function AddItemsModal({
-  tableId,
   tableName,
   waOn,
+  loadMenu,
+  onSend,
   onClose,
   onAdded,
 }: {
-  tableId: string;
   tableName: string;
   waOn: boolean;
+  loadMenu: (show: (m: Menu | null) => void) => Promise<void>;
+  onSend: (lines: AddLine[]) => Promise<{ error: string | null; queued: boolean }>;
   onClose: () => void;
-  onAdded: (count: number) => void;
+  onAdded: (count: number, queued: boolean) => void;
 }) {
-  const supabase = supabaseBrowser();
   const [categories, setCategories] = useState<Category[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [cat, setCat] = useState<string>("all");
@@ -1505,15 +1870,16 @@ export function AddItemsModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Loads once when the window opens (from this device's copy when offline).
+  const [menuMissing, setMenuMissing] = useState(false);
+  const loader = useRef(loadMenu);
   useEffect(() => {
-    void Promise.all([
-      supabase.from("menu_categories").select("*").order("sort_order"),
-      supabase.from("menu_items").select("*").eq("is_available", true).order("sort_order"),
-    ]).then(([c, m]) => {
-      setCategories((c.data ?? []) as Category[]);
-      setMenu(((m.data ?? []) as MenuItem[]).map((i) => ({ ...i, options: Array.isArray(i.options) ? i.options : [] })));
+    void loader.current((m) => {
+      if (!m) return setMenuMissing(true);
+      setCategories(m.categories);
+      setMenu(m.menu);
     });
-  }, [supabase]);
+  }, []);
 
   const byId = useMemo(() => new Map(menu.map((m) => [m.id, m])), [menu]);
   const q = query.trim().toLowerCase();
@@ -1550,18 +1916,16 @@ export function AddItemsModal({
     }
     setBusy(true);
     setError(null);
-    const res = await staffAddItems(
-      tableId,
-      lines.map(([, p]) => ({
-        menu_item_id: p.itemId,
-        qty: p.qty,
-        note: p.note.trim() || null,
-        options: p.options.map(({ group, name }) => ({ group, name })),
-      })),
+    const res = await onSend(
+      lines.map(([, p]) => {
+        const m = byId.get(p.itemId);
+        const priced = p.options.map((o) => ({ ...o, price: m?.options.find((g) => g.name === o.group)?.choices.find((c) => c.name === o.name)?.price ?? 0 }));
+        return { id: newId(), menu_item_id: p.itemId, qty: p.qty, note: p.note.trim() || null, options: priced, name: m?.name ?? "", price: unit(p) };
+      }),
     );
     setBusy(false);
-    if (!res.ok) setError(res.error === "invalid_options" ? "Pick the options again for one of the dishes." : res.error);
-    else onAdded(count);
+    if (res.error) setError(res.error.includes("invalid_options") ? "Pick the options again for one of the dishes." : res.error);
+    else onAdded(count, res.queued);
   }
 
   return (
@@ -1656,7 +2020,11 @@ export function AddItemsModal({
             </li>
           );
         })}
-        {shown.length === 0 && <li className="py-10 text-center text-stone-400">No dishes match.</li>}
+        {shown.length === 0 && (
+          <li className="py-10 text-center text-stone-400">
+            {menuMissing ? "No internet, and this device hasn't saved the menu yet. Open Add items once while online." : "No dishes match."}
+          </li>
+        )}
       </ul>
 
       <div className="border-t border-stone-200 bg-white px-5 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">

@@ -2,7 +2,8 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { initial, useCafe } from "@/lib/cafe";
+import { forgetSavedCafe, initial, useCafe } from "@/lib/cafe";
+import { forgetCafeData, readQueue } from "@/lib/offline/store";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
@@ -20,7 +21,14 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
   const cafe = useCafe();
 
   async function signOut() {
-    if (!confirm("Sign out of this device?")) return;
+    // Changes made offline stay on this device until they're sent; signing out stops that.
+    const waiting = cafe ? (await readQueue(cafe.id)).length : 0;
+    const ask = waiting
+      ? `${waiting} change${waiting === 1 ? "" : "s"} made offline (orders or bills) haven't been sent yet. Connect to the internet and wait for "All saved" first.\n\nSign out anyway? They'll be sent the next time this café signs in here.`
+      : "Sign out of this device?";
+    if (!confirm(ask)) return;
+    if (cafe) await forgetCafeData(cafe.id);
+    forgetSavedCafe();
     await supabaseBrowser().auth.signOut();
     // Full reload so no signed-in pages linger in the router cache.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination

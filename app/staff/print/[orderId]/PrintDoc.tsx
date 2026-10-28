@@ -10,14 +10,14 @@ import type { Order, OrderItem } from "@/lib/types";
 
 type Kind = "bill" | "receipt" | "kot";
 type Paper = "80" | "58";
-type Loaded = {
+export type Loaded = {
   cafe: Cafe | null;
   order: Order & { tables: { name: string } | null };
   items: OrderItem[];
   payments: { method: "upi" | "cash"; amount_paise: number; received_at: string }[];
 };
 
-const PAPER_KEY = "sohees.paper";
+export const PAPER_KEY = "sohees.paper";
 
 function when(iso: string) {
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" });
@@ -129,7 +129,7 @@ function Line({ left, right, bold, big }: { left: React.ReactNode; right: React.
   );
 }
 
-function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt"; printedAt: string }) {
+export function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt"; printedAt: string }) {
   const { cafe, order, items, payments } = data;
   const paid = order.status === "paid";
   const billed = items.filter((i) => ["pending", "ready", "served"].includes(i.status));
@@ -219,7 +219,7 @@ function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "receipt
   );
 }
 
-function Kot({ data, printedAt }: { data: Loaded; printedAt: string }) {
+export function Kot({ data, printedAt }: { data: Loaded; printedAt: string }) {
   const { order, items } = data;
   const cooking = items.filter((i) => i.status === "pending");
   return (

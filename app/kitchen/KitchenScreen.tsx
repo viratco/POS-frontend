@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import SoundToggle from "@/components/SoundToggle";
 import { chime } from "@/lib/chime";
+import { useOnline } from "@/lib/offline/net";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import { useOrderFeed } from "@/lib/useOrderFeed";
 
@@ -22,6 +23,7 @@ export default function KitchenScreen() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(0); // set on mount; 0 avoids a prerender-time clock
+  const online = useOnline();
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -69,7 +71,15 @@ export default function KitchenScreen() {
         </div>
       </header>
 
-      {error && <p className="mb-4 rounded-lg bg-red-900 p-3 text-xl">{error}</p>}
+      {!online && (
+        <div className="mb-4 rounded-xl border-2 border-amber-400 bg-amber-950 p-4 text-amber-100">
+          <p className="text-2xl font-bold">📴 No internet</p>
+          <p className="mt-1 text-lg">
+            New orders won&apos;t show here until it&apos;s back. The counter prints a kitchen slip for every order meanwhile. Cook from the slips.
+          </p>
+        </div>
+      )}
+      {error && online && <p className="mb-4 rounded-lg bg-red-900 p-3 text-xl">{error}</p>}
 
       {tickets.length === 0 ? (
         <p className="mt-32 text-center text-4xl text-neutral-500">All caught up ✓</p>

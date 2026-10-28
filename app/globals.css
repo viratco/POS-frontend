@@ -75,6 +75,9 @@ body {
 
 @media print {
   .no-print { display: none !important; }
+  /* Printing a slip from the counter screen (components/PrintSheet): only the slip. */
+  body.pos-printing > *:not(#pos-print) { display: none !important; }
+  body.pos-printing #pos-print { position: static !important; overflow: visible !important; }
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

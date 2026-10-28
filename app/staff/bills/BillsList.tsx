@@ -12,6 +12,7 @@ type BillRow = {
   total_paise: number;
   discount_paise?: number | null;
   discount_reason?: string | null;
+  offline_note?: string | null; // what the server adjusted when an offline bill was sent
   tables: { name: string } | null;
   payments: { method: "upi" | "cash"; amount_paise: number }[];
 };
@@ -111,7 +112,14 @@ export default function BillsList() {
               {shown.map((r) => (
                 <li key={r.id} className="flex items-center gap-4 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold tabular-nums">{r.invoice_no ?? "—"}</div>
+                    <div className="flex items-center gap-2 font-semibold tabular-nums">
+                      {r.invoice_no ?? "—"}
+                      {/\/[A-Z]\d{4}$/.test(r.invoice_no ?? "") && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800" title="Paid while the internet was down">
+                          Offline bill
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-stone-500">
                       {r.tables?.name ?? "—"} ·{" "}
                       {new Date(r.closed_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} ·{" "}
@@ -122,6 +130,7 @@ export default function BillsList() {
                         </span>
                       )}
                     </div>
+                    {r.offline_note && <div className="mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">⚠ {r.offline_note}</div>}
                   </div>
                   <div className="text-lg font-bold tabular-nums">{formatINR(r.total_paise)}</div>
                   <button

@@ -57,6 +57,7 @@ export default function MenuClient({
   const [picking, setPicking] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [placed, setPlaced] = useState<PlacedItem[] | null>(null);
+  const [counterAway, setCounterAway] = useState(false);
   const [customizing, setCustomizing] = useState<MenuItem | null>(null);
   // Guest details, asked once and remembered on this phone.
   const [guest, setGuest] = useState<GuestDetails>({ name: "", phone: "", marketing_consent: false });
@@ -186,6 +187,7 @@ export default function MenuClient({
         localStorage.setItem(GUEST_KEY, JSON.stringify(details));
       } catch {}
       setPlaced(res.items);
+      setCounterAway(!!res.counterAway);
       setCart({});
       setReviewing(false);
       setOpenTile(null);
@@ -194,7 +196,7 @@ export default function MenuClient({
   }
 
   if (placed) {
-    return <Confirmation brand={brand} tableName={tableName} placed={placed} onAgain={() => setPlaced(null)} />;
+    return <Confirmation brand={brand} tableName={tableName} placed={placed} counterAway={counterAway} onAgain={() => setPlaced(null)} />;
   }
 
   const current = tiles.find((t) => t.id === openTile);
@@ -887,7 +889,19 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
   );
 }
 
-function Confirmation({ brand, tableName, placed, onAgain }: { brand: Brand; tableName: string; placed: PlacedItem[]; onAgain: () => void }) {
+function Confirmation({
+  brand,
+  tableName,
+  placed,
+  counterAway,
+  onAgain,
+}: {
+  brand: Brand;
+  tableName: string;
+  placed: PlacedItem[];
+  counterAway: boolean;
+  onAgain: () => void;
+}) {
   const placedTotal = placed.reduce((s, i) => s + i.price_paise_snapshot * i.qty, 0);
   return (
     <div className={`min-h-screen bg-white ${INK}`}>
@@ -904,6 +918,11 @@ function Confirmation({ brand, tableName, placed, onAgain }: { brand: Brand; tab
             Our staff will confirm your order for <span className="font-semibold text-[#2d3748]">{tableName}</span> and send it to the
             kitchen right away.
           </p>
+          {counterAway && (
+            <p className="mt-4 rounded-2xl bg-[#fffbeb] px-4 py-3 text-sm font-medium text-[#92400e] ring-1 ring-[#fde68a]">
+              The café&apos;s system is reconnecting right now. If no one confirms your order in a few minutes, please tell a staff member what you ordered.
+            </p>
+          )}
         </div>
 
         <div className="mt-8 rounded-2xl border border-[#edf2f7] p-5">

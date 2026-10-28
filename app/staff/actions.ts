@@ -12,25 +12,40 @@ const toTicket = (i: TicketRow) => ({
   note: i.note,
 });
 
-export async function staffAddItems(tableId: string, lines: CartLine[]): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = await supabaseServer();
-  const { data, error } = await supabase.rpc("staff_add_items", { p_table_id: tableId, p_items: lines });
-  if (error) return { ok: false, error: error.message };
+// status lets the counter tell "the server said no" from "the server is out of reach".
+type Result = { ok: true; orderId?: string } | { ok: false; error: string; code?: string; status: number };
 
-  const result = data as { table_name: string; items: TicketRow[] };
-  notifyNewItemsAfterResponse({
-    tableName: result.table_name,
-    source: "staff",
-    items: result.items.map(toTicket),
-  });
-  return { ok: true };
+// Each dish may carry an id made on the counter, and a new order the id the counter gave it,
+// so sending the same thing again after a dropped connection never adds it twice.
+export async function staffAddItems(
+  tableId: string,
+  lines: (CartLine & { id?: string })[],
+  orderId?: string,
+): Promise<Result> {
+  const supabase = await supabaseServer();
+  let { data, error, status } = await supabase.rpc("staff_add_items", { p_table_id: tableId, p_items: lines, p_order_id: orderId ?? null });
+  // Database not updated for offline mode yet: same call the old way.
+  if (error?.code === "PGRST202") ({ data, error, status } = await supabase.rpc("staff_add_items", { p_table_id: tableId, p_items: lines }));
+  if (error) return { ok: false, error: error.message, code: error.code, status };
+
+  const result = data as { order_id: string; table_name: string; items: TicketRow[] };
+  if (result.items.length > 0) {
+    notifyNewItemsAfterResponse({
+      tableName: result.table_name,
+      source: "staff",
+      items: result.items.map(toTicket),
+    });
+  }
+  return { ok: true, orderId: result.order_id };
 }
 
-// Accept a customer's QR order: sends its waiting items to the kitchen and alerts the chef.
-export async function acceptOrder(orderId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+// Accept a customer's QR order: sends the waiting items staff saw (itemIds) to the kitchen
+// and alerts the chef.
+export async function acceptOrder(orderId: string, itemIds?: string[]): Promise<Result> {
   const supabase = await supabaseServer();
-  const { data, error } = await supabase.rpc("accept_order_items", { p_order_id: orderId });
-  if (error) return { ok: false, error: error.message };
+  let { data, error, status } = await supabase.rpc("accept_order_items", { p_order_id: orderId, p_item_ids: itemIds ?? null });
+  if (error?.code === "PGRST202") ({ data, error, status } = await supabase.rpc("accept_order_items", { p_order_id: orderId }));
+  if (error) return { ok: false, error: error.message, code: error.code, status };
 
   const result = data as { table_name: string; items: TicketRow[] };
   if (result.items.length > 0) {
