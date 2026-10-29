@@ -29,6 +29,7 @@ export default function MenuAdmin() {
   const [items, setItems] = useState<MenuItem[]>([]);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [newCategory, setNewCategory] = useState("");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -135,6 +136,13 @@ export default function MenuAdmin() {
     });
   }
 
+  // Search by dish name, description or sub-category; categories with no match are hidden.
+  const q = query.trim().toLowerCase();
+  const matches = (i: MenuItem) =>
+    !q || [i.name, i.description, i.subcategory].some((t) => t?.toLowerCase().includes(q));
+  const found = items.filter(matches);
+  const shownCategories = q ? categories.filter((c) => found.some((i) => i.category_id === c.id)) : categories;
+
   return (
     <div className="min-h-screen">
       <StaffNav />
@@ -142,7 +150,36 @@ export default function MenuAdmin() {
         <h1 className="text-2xl font-semibold">Menu</h1>
         {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-        {categories.map((c) => (
+        <div className="sticky top-16 z-10 -mx-5 mt-4 bg-[#fafaf9]/95 px-5 py-2 backdrop-blur">
+          <div className="flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 focus-within:border-stone-900 focus-within:ring-1 focus-within:ring-stone-900">
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-stone-400" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+              placeholder="Search dishes…"
+              className="h-11 w-full bg-transparent text-[15px] outline-none [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query && (
+              <button onClick={() => setQuery("")} aria-label="Clear search" className="shrink-0 rounded-md px-1.5 text-lg leading-none text-stone-400 hover:text-stone-900">
+                ×
+              </button>
+            )}
+          </div>
+          {q && (
+            <p className="mt-1.5 text-xs text-stone-500">
+              {found.length} dish{found.length === 1 ? "" : "es"} found
+            </p>
+          )}
+        </div>
+
+        {q && found.length === 0 && <p className="mt-8 text-center text-stone-400">No dishes match &ldquo;{query.trim()}&rdquo;.</p>}
+
+        {shownCategories.map((c) => (
           <section key={c.id} className="mt-8">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -163,7 +200,7 @@ export default function MenuAdmin() {
             </div>
             <ul className="mt-2 divide-y divide-stone-100 rounded-xl border border-stone-200 bg-white">
               {items
-                .filter((i) => i.category_id === c.id)
+                .filter((i) => i.category_id === c.id && matches(i))
                 .map((i) => (
                   <li key={i.id} className="flex items-center gap-3 p-3">
                     <div className={`min-w-0 flex-1 ${i.is_available ? "" : "opacity-50"}`}>
