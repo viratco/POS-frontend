@@ -1,10 +1,10 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import CafeName from "@/components/CafeName";
 import StaffNav from "@/components/StaffNav";
-import { RANGES, SLOW_ACCEPT_MINUTES, type Analytics, type Kpi, type RangeKey } from "@/lib/analytics";
+import { type Filters, hasFilters, RANGES, SLOW_ACCEPT_MINUTES, type Analytics, type Kpi, type Range } from "@/lib/analytics";
 import { formatINR } from "@/lib/money";
 import type { Profit } from "@/lib/profit";
+import AnalyticsFilters from "./AnalyticsFilters";
 import { Columns, Heatmap, MenuMatrix } from "./charts";
 import { BarList, C, Empty, inrCompact, minutes, QUADRANTS, SplitBar } from "./parts";
 import RefreshButton from "./RefreshButton";
@@ -15,6 +15,11 @@ const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 export function istClock(ms: number) {
   return new Date(ms).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+}
+
+/** Tables in floor order: Table 2 before Table 10. */
+export function tableChoices(tables: { id: string; name: string }[]) {
+  return [...tables].sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
 }
 
 export function AnalyticsSkeleton() {
@@ -38,16 +43,24 @@ export default function AnalyticsDashboard({
   a,
   profit,
   range,
+  filters,
+  tables,
+  today,
   updatedAt,
   demo = false,
 }: {
   a: Analytics;
   profit?: Profit | null;
-  range: RangeKey;
+  range: Range;
+  filters: Filters;
+  tables: { id: string; name: string }[];
+  today: string;
   updatedAt: string;
   demo?: boolean;
 }) {
-  const meta = RANGES.find((r) => r.key === range)!;
+  const rangeName = RANGES.find((r) => r.key === range.key)?.label;
+  const filtered = hasFilters(filters);
+  const oneDay = a.period.days === 1;
   const base = demo ? "/dev/analytics-preview" : "/admin/analytics";
 
   return (
@@ -61,40 +74,31 @@ export default function AnalyticsDashboard({
         )}
 
         {/* Header + range filter */}
-        <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-xs font-semibold tracking-[0.18em] text-stone-400 uppercase">
               <CafeName />
             </p>
             <h1 className="mt-1 font-display text-4xl font-semibold tracking-tight text-stone-900">Analytics</h1>
             <p className="mt-1.5 text-sm text-stone-500">
-              Paid bills · net of GST · {meta.compare} · updated {updatedAt}
+              Paid bills · net of GST · {a.period.compare} · updated {updatedAt}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <nav className="flex gap-1 rounded-xl bg-white p-1 shadow-sm ring-1 ring-stone-200/70" aria-label="Date range">
-              {RANGES.map((r) => (
-                <Link
-                  key={r.key}
-                  href={`${base}?range=${r.key}`}
-                  prefetch={false}
-                  aria-current={r.key === range ? "page" : undefined}
-                  className={`rounded-lg px-2.5 py-2 text-sm font-semibold whitespace-nowrap transition sm:px-3.5 ${
-                    r.key === range ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-                  }`}
-                >
-                  {r.label}
-                </Link>
-              ))}
-            </nav>
-            <RefreshButton />
-          </div>
+          <RefreshButton />
         </div>
+
+        <AnalyticsFilters base={base} range={range} filters={filters} tables={tables} today={today} />
+
+        <p className="mt-4 text-lg font-bold text-stone-900">
+          {rangeName && <span>{rangeName} · </span>}
+          {a.period.label}
+          {filtered && <span className="ml-2 text-sm font-semibold text-amber-700">Filters on: figures below are only for this selection</span>}
+        </p>
 
         {!a.hasData ? (
           <div className="mt-10 rounded-3xl bg-white p-14 text-center ring-1 ring-stone-200/70">
             <p className="font-display text-2xl text-stone-800">No orders in this period yet</p>
-            <p className="mt-2 text-sm text-stone-500">Pick a longer range above, or check back once tables start ordering.</p>
+            <p className="mt-2 text-sm text-stone-500">Try other dates or clear the filters above.</p>
           </div>
         ) : (
           <>
@@ -108,12 +112,13 @@ export default function AnalyticsDashboard({
               <KpiTile label="Items sold" kpi={a.kpis.itemsSold} format={(v) => v.toLocaleString("en-IN")} />
             </section>
 
-            {profit && <ProfitSection p={profit} netSales={a.kpis.netSales.value} range={range} />}
+            {profit && <ProfitSection p={profit} netSales={a.kpis.netSales.value} days={a.period.days} />}
+            {filtered && <p className="mt-3 text-sm text-stone-500">Profit is hidden while filters are on, because stock bills can&apos;t be split by table, payment or time.</p>}
 
             {/* Sales trend + mixes */}
             <section className="mt-3 grid gap-3 lg:grid-cols-3">
-              <Card title={range === "today" ? "Sales by hour" : "Daily sales"} sub="Net sales of paid bills" className="lg:col-span-2">
-                {range === "today" ? (
+              <Card title={oneDay ? "Sales by hour" : "Daily sales"} sub="Net sales of paid bills" className="lg:col-span-2">
+                {oneDay ? (
                   <Columns data={trimHours(a.hourly).map((h) => ({ key: h.hour, label: hour12(h.hour), value: h.net, sub: String(h.bills) }))} />
                 ) : (
                   <Columns data={a.daily.map((d) => ({ key: d.day, label: d.label, value: d.net, sub: String(d.bills) }))} />
@@ -261,7 +266,7 @@ export default function AnalyticsDashboard({
                     />
                     <MiniStat label="Combos" value={pct(a.combos.share)} foot={`of item sales · ${inrCompact(a.combos.net)}`} />
                   </div>
-                  <div className="mt-5">
+                  {!filtered && <div className="mt-5">
                     <p className="text-sm font-semibold text-stone-900">
                       Not ordered in this period <span className="font-normal text-stone-400">({a.neverOrdered.length})</span>
                     </p>
@@ -276,7 +281,7 @@ export default function AnalyticsDashboard({
                         ))}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </Card>
               </div>
             </section>
@@ -340,7 +345,7 @@ function Delta({ d, fmt, invert = false }: { d: number | null; fmt: (d: number) 
 }
 
 // Net sales − stock bought (from Purchases) = gross profit, and the margin.
-function ProfitSection({ p, netSales, range }: { p: Profit; netSales: number; range: RangeKey }) {
+function ProfitSection({ p, netSales, days }: { p: Profit; netSales: number; days: number }) {
   const change = (k: { value: number; prev: number }) => (k.prev === 0 ? (k.value === 0 ? 0 : null) : (k.value - k.prev) / Math.abs(k.prev));
   const rupees = (paise: number) => formatINR(Math.round(paise / 100) * 100);
   const pct = (m: number | null) => (m == null ? "—" : `${Math.round(m * 100)}%`);
@@ -420,7 +425,7 @@ function ProfitSection({ p, netSales, range }: { p: Profit; netSales: number; ra
 
       <p className="mt-5 text-xs leading-relaxed text-stone-400">
         Stock counts on the day it was bought, so a big bulk buy makes that day look low and the next days look high
-        {range === "today" || range === "7d" ? ". 30 or 90 days gives the truest margin" : ""}. Rent, salaries, gas and electricity aren&apos;t included. Add
+        {days <= 7 ? ". 30 or 90 days gives the truest margin" : ""}. Rent, salaries, gas and electricity aren&apos;t included. Add
         every supplier bill under Purchases for an accurate number.
       </p>
     </section>

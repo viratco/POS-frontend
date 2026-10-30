@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import AnalyticsDashboard, { AnalyticsSkeleton, istClock } from "@/app/admin/analytics/AnalyticsDashboard";
-import { computeAnalytics, parseRange, type RangeKey } from "@/lib/analytics";
+import { computeAnalytics, filterInput, parseFilters, parseRange, type Filters, type Range } from "@/lib/analytics";
 import { demoAnalyticsInput } from "@/lib/analyticsDemo";
 import type { Profit } from "@/lib/profit";
 
@@ -17,9 +17,11 @@ export default function AnalyticsPreview({ searchParams }: PageProps<"/dev/analy
 }
 
 async function Preview({ searchParams }: { searchParams: PageProps<"/dev/analytics-preview">["searchParams"] }) {
-  const range = parseRange((await searchParams).range);
+  const q = await searchParams;
+  const range = parseRange(q.range, q.from, q.to);
+  const filters = parseFilters(q);
   await connection();
-  const { a, updatedAt } = build(range);
+  const { a, tables, today, updatedAt } = build(range, filters);
   // Made-up stock spend: about a third of sales, a bit more last period.
   const net = a.kpis.netSales;
   const spend = { value: Math.round(net.value * 0.34), prev: Math.round(net.prev * 0.39) };
@@ -36,10 +38,16 @@ async function Preview({ searchParams }: { searchParams: PageProps<"/dev/analyti
       { name: "Gochujang", paise: Math.round(spend.value * 0.05) },
     ],
   };
-  return <AnalyticsDashboard a={a} profit={profit} range={range} updatedAt={updatedAt} demo />;
+  return <AnalyticsDashboard a={a} profit={profit} range={range} filters={filters} tables={tables} today={today} updatedAt={updatedAt} demo />;
 }
 
-function build(range: RangeKey) {
+function build(range: Range, filters: Filters) {
   const now = Date.now();
-  return { a: computeAnalytics(demoAnalyticsInput(now), range, now), updatedAt: istClock(now) };
+  const input = demoAnalyticsInput(now);
+  return {
+    a: computeAnalytics(filterInput(input, filters), range, now),
+    tables: input.tables,
+    today: new Date(now + 330 * 60_000).toISOString().slice(0, 10),
+    updatedAt: istClock(now),
+  };
 }

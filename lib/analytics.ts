@@ -3,17 +3,65 @@
 
 import type { Diet } from "./types";
 
-export type RangeKey = "today" | "7d" | "30d" | "90d";
+export type RangeKey = "today" | "yesterday" | "7d" | "thisMonth" | "lastMonth" | "30d" | "90d" | "custom";
+/** from / to are IST calendar dates (YYYY-MM-DD), used only by "custom". */
+export type Range = { key: RangeKey; from?: string; to?: string };
 
-export const RANGES: { key: RangeKey; label: string; compare: string }[] = [
-  { key: "today", label: "Today", compare: "vs same time yesterday" },
-  { key: "7d", label: "7 days", compare: "vs previous 7 days" },
-  { key: "30d", label: "30 days", compare: "vs previous 30 days" },
-  { key: "90d", label: "90 days", compare: "vs previous 90 days" },
+export const RANGES: { key: Exclude<RangeKey, "custom">; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "7 days" },
+  { key: "thisMonth", label: "This month" },
+  { key: "lastMonth", label: "Last month" },
+  { key: "30d", label: "30 days" },
+  { key: "90d", label: "90 days" },
 ];
 
-export function parseRange(v: string | string[] | undefined): RangeKey {
-  return RANGES.some((r) => r.key === v) ? (v as RangeKey) : "7d";
+const validDate = (v: unknown): v is string =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+
+export function parseRange(v: string | string[] | undefined, from?: string | string[], to?: string | string[]): Range {
+  if (v === "custom" && validDate(from) && validDate(to)) return from <= to ? { key: v, from, to } : { key: v, from: to, to: from };
+  return { key: RANGES.some((r) => r.key === v) ? (v as RangeKey) : "7d" };
+}
+
+/* ─────────────────────────── filters ─────────────────────────── */
+
+export type TimeOfDay = "morning" | "afternoon" | "evening";
+export type Filters = { pay: "upi" | "cash" | null; table: string | null; time: TimeOfDay | null };
+
+export const TIMES_OF_DAY: { key: TimeOfDay; label: string; from: number; to: number }[] = [
+  { key: "morning", label: "Morning (before 12 pm)", from: 0, to: 12 },
+  { key: "afternoon", label: "Afternoon (12–5 pm)", from: 12, to: 17 },
+  { key: "evening", label: "Evening (after 5 pm)", from: 17, to: 24 },
+];
+
+export function parseFilters(q: { pay?: string | string[]; table?: string | string[]; time?: string | string[] }): Filters {
+  return {
+    pay: q.pay === "upi" || q.pay === "cash" ? q.pay : null,
+    table: typeof q.table === "string" && q.table ? q.table : null,
+    time: TIMES_OF_DAY.some((t) => t.key === q.time) ? (q.time as TimeOfDay) : null,
+  };
+}
+
+export const hasFilters = (f: Filters) => !!(f.pay || f.table || f.time);
+
+/** Keeps only the orders matching the filters; dishes and payments follow their orders. */
+export function filterInput(input: AnalyticsInput, f: Filters): AnalyticsInput {
+  if (!hasFilters(f)) return input;
+  const paidBy = f.pay ? new Set(input.payments.filter((p) => p.method === f.pay).map((p) => p.order_id)) : null;
+  const slot = TIMES_OF_DAY.find((t) => t.key === f.time);
+  const orders = input.orders.filter((o) => {
+    if (paidBy && !paidBy.has(o.id)) return false;
+    if (f.table && o.table_id !== f.table) return false;
+    if (slot) {
+      const h = istParts(o.created_at).hour;
+      if (h < slot.from || h >= slot.to) return false;
+    }
+    return true;
+  });
+  const ids = new Set(orders.map((o) => o.id));
+  return { ...input, orders, items: input.items.filter((i) => ids.has(i.order_id)), payments: input.payments.filter((p) => ids.has(p.order_id)) };
 }
 
 /* ─────────────────────────── input rows ─────────────────────────── */
@@ -83,13 +131,57 @@ function istParts(iso: string) {
   return { hour: d.getUTCHours(), dow: (d.getUTCDay() + 6) % 7 }; // Mon = 0
 }
 
-export function rangeWindow(range: RangeKey, now: number) {
-  const days = { today: 1, "7d": 7, "30d": 30, "90d": 90 }[range];
-  const from = istDayStart(now) - (days - 1) * DAY_MS;
-  // "Today" compares against yesterday up to the same clock time.
-  const prevFrom = from - days * DAY_MS;
-  const prevTo = range === "today" ? now - DAY_MS : from;
-  return { from, to: now, prevFrom, prevTo, days };
+/** First moment of the IST calendar month containing `ms`. */
+function istMonthStart(ms: number) {
+  const d = new Date(ms + IST_MS);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - IST_MS;
+}
+
+const MAX_CUSTOM_DAYS = 366;
+
+export function rangeWindow(range: Range, now: number) {
+  const today = istDayStart(now);
+  let from: number, to: number, prevFrom: number, prevTo: number, compare: string;
+
+  if (range.key === "today") {
+    // Compares against yesterday up to the same clock time.
+    [from, to, prevFrom, prevTo, compare] = [today, now, today - DAY_MS, now - DAY_MS, "vs same time yesterday"];
+  } else if (range.key === "yesterday") {
+    [from, to, prevFrom, prevTo, compare] = [today - DAY_MS, today, today - 2 * DAY_MS, today - DAY_MS, "vs the day before"];
+  } else if (range.key === "thisMonth") {
+    from = istMonthStart(now);
+    prevFrom = istMonthStart(from - 1);
+    [to, prevTo, compare] = [now, Math.min(prevFrom + (now - from), from), "vs same dates last month"];
+  } else if (range.key === "lastMonth") {
+    to = istMonthStart(now);
+    from = istMonthStart(to - 1);
+    [prevFrom, prevTo, compare] = [istMonthStart(from - 1), from, "vs the month before"];
+  } else if (range.key === "custom" && range.from && range.to) {
+    // Dates in the future are pulled back to today; a very long range is cut to a year.
+    const end = Math.min(Date.parse(`${range.to}T00:00:00Z`) - IST_MS, today);
+    from = Math.max(Math.min(Date.parse(`${range.from}T00:00:00Z`) - IST_MS, end), end - (MAX_CUSTOM_DAYS - 1) * DAY_MS);
+    to = end === today ? now : end + DAY_MS;
+    const n = Math.round((end - from) / DAY_MS) + 1;
+    [prevFrom, prevTo, compare] = [from - n * DAY_MS, from, n === 1 ? "vs the day before" : `vs previous ${n} days`];
+  } else {
+    const n = range.key === "30d" ? 30 : range.key === "90d" ? 90 : 7;
+    from = today - (n - 1) * DAY_MS;
+    [to, prevFrom, prevTo, compare] = [now, from - n * DAY_MS, from, `vs previous ${n} days`];
+  }
+
+  const days = Math.round((istDayStart(to - 1) - from) / DAY_MS) + 1;
+  return { from, to, prevFrom, prevTo, days, compare, label: periodLabel(from, istDayStart(to - 1)) };
+}
+
+/** "29 Oct 2026", or "1 – 30 Oct 2026". */
+function periodLabel(first: number, last: number) {
+  const fmt = (ms: number, o: Intl.DateTimeFormatOptions) => new Date(ms).toLocaleDateString("en-IN", { ...o, timeZone: "Asia/Kolkata" });
+  const full: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" };
+  if (first === last) return fmt(first, full);
+  const sameYear = fmt(first, { year: "numeric" }) === fmt(last, { year: "numeric" });
+  const sameMonth = sameYear && fmt(first, { month: "short" }) === fmt(last, { month: "short" });
+  const start = sameMonth ? fmt(first, { day: "numeric" }) : fmt(first, sameYear ? { day: "numeric", month: "short" } : full);
+  return `${start} – ${fmt(last, full)}`;
 }
 
 const mins = (a: string, b: string) => (new Date(b).getTime() - new Date(a).getTime()) / 60_000;
@@ -112,6 +204,7 @@ export type Kpi = { value: number; prev: number };
 export type MatrixQuadrant = "star" | "workhorse" | "puzzle" | "dog";
 
 export type Analytics = {
+  period: { label: string; compare: string; days: number };
   hasData: boolean;
   kpis: { netSales: Kpi; bills: Kpi; avgBill: Kpi; itemsSold: Kpi; grossWithGst: number; gst: number };
   daily: { day: number; label: string; net: number; bills: number }[];
@@ -143,7 +236,7 @@ const isSold = (i: AItem) => i.status === "pending" || i.status === "ready" || i
 /** A guest QR order waiting longer than this for staff to accept counts as slow. */
 export const SLOW_ACCEPT_MINUTES = 5;
 
-export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: number): Analytics {
+export function computeAnalytics(input: AnalyticsInput, range: Range, now: number): Analytics {
   const w = rangeWindow(range, now);
   const inCur = (iso: string) => {
     const t = new Date(iso).getTime();
@@ -394,6 +487,7 @@ export function computeAnalytics(input: AnalyticsInput, range: RangeKey, now: nu
   const itemNetTotal = [...byItem.values()].reduce((s, e) => s + e.net, 0);
 
   return {
+    period: { label: w.label, compare: w.compare, days: w.days },
     hasData: curOrders.length > 0,
     kpis: {
       netSales: { value: netCur, prev: netPrev },

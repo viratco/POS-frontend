@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { rangeWindow, type Kpi, type RangeKey } from "./analytics";
+import { rangeWindow, type Kpi, type Range } from "./analytics";
 
 // Gross profit = net sales (before GST) − stock bought (Purchases), for the same period.
 // Stock counts on the day it was bought, so short periods swing with bulk buys;
@@ -18,21 +18,22 @@ const istDate = (ms: number) => new Date(ms + 5.5 * 3600_000).toISOString().slic
 
 type Row = { total_paise: number; payment: string; purchased_on: string; purchase_items: { name: string; amount_paise: number }[] };
 
-export async function loadProfit(supabase: SupabaseClient, range: RangeKey, now: number, netSales: Kpi): Promise<Profit | null> {
+export async function loadProfit(supabase: SupabaseClient, range: Range, now: number, netSales: Kpi): Promise<Profit | null> {
   const w = rangeWindow(range, now);
   const { data, error } = await supabase
     .from("purchases")
     .select("total_paise, payment, purchased_on, purchase_items(name, amount_paise)")
     .is("voided_at", null)
     .gte("purchased_on", istDate(w.prevFrom))
-    .lte("purchased_on", istDate(now));
+    .lte("purchased_on", istDate(w.to - 1));
   if (error) return null; // Purchases not set up yet: the section stays hidden
 
   // Dates have no time of day, so "today" compares with all of yesterday.
   const from = istDate(w.from);
+  const prevLast = istDate(w.prevTo - 1);
   const rows = (data ?? []) as Row[];
   const cur = rows.filter((r) => r.purchased_on >= from);
-  const prev = rows.filter((r) => r.purchased_on < from);
+  const prev = rows.filter((r) => r.purchased_on < from && r.purchased_on <= prevLast);
   const sum = (rs: Row[]) => rs.reduce((s, r) => s + r.total_paise, 0);
 
   const spend = { value: sum(cur), prev: sum(prev) };
