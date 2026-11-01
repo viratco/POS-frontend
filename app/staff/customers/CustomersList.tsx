@@ -146,7 +146,7 @@ export default function CustomersList() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f4f1] text-stone-900">
+    <div className="min-h-screen bg-[color:var(--t-f6f4f1)] text-stone-900">
       <StaffNav />
       <main className="mx-auto max-w-4xl px-4 pt-6 pb-16 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -215,7 +215,7 @@ export default function CustomersList() {
             <ul className="divide-y divide-stone-100">
               {shown.map((c) => (
                 <li key={c.phone} className="flex items-center gap-3 px-4 py-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#f0e7d8] font-bold text-[#6e5d4e]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--t-f0e7d8)] font-bold text-[color:var(--t-6e5d4e)]">
                     {c.name.trim()[0]?.toUpperCase() ?? "·"}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -304,7 +304,7 @@ function BillsDrawer({ customer, onClose }: { customer: Customer; onClose: () =>
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 animate-fade-in bg-stone-900/30 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-[480px] animate-slide-in flex-col bg-[#fbfaf8] shadow-2xl">
+      <aside className="relative flex h-full w-full max-w-[480px] animate-slide-in flex-col bg-[color:var(--t-fbfaf8)] shadow-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 bg-white px-5 pt-5 pb-4">
           <div className="min-w-0">
             <h2 className="truncate text-2xl font-bold tracking-tight">{customer.name}</h2>

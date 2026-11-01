@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+// import Script from "next/script"; // themes: on hold
 import { PRODUCT_NAME } from "@/lib/business";
 import "./globals.css";
+import "./themes.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -17,8 +19,15 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${instrument.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${instrument.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        {/* themes: on hold. The café's theme before the first paint, so staff screens don't flash the default colours.
+        <Script id="pos-theme" strategy="beforeInteractive">
+          {`try{var t=localStorage.getItem("pos.theme");if(t)document.documentElement.dataset.theme=t}catch(e){}`}
+        </Script>
+        */}
+      </body>
     </html>
   );
 }

@@ -68,7 +68,7 @@ export default function BillsList() {
     rows.reduce((s, r) => s + r.payments.filter((p) => !m || p.method === m).reduce((a, p) => a + p.amount_paise, 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#f6f4f1] text-stone-900">
+    <div className="min-h-screen bg-[color:var(--t-f6f4f1)] text-stone-900">
       <StaffNav />
       <main className="mx-auto max-w-4xl px-4 pt-6 pb-16 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">

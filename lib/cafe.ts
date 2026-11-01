@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { setGstRate } from "@/lib/money";
+// import { applyTheme, clearTheme } from "@/lib/themes"; // themes: on hold
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 // The signed-in login's café (each login belongs to exactly one). Row Level Security
@@ -21,6 +22,7 @@ export type Cafe = {
   logo_url: string | null;
   qr_logo_url: string | null;
   floor_plan?: unknown; // see lib/floorPlan.ts (readPlan)
+  theme?: string | null; // see lib/themes.ts
 };
 
 let cached: Promise<Cafe | null> | undefined;
@@ -44,11 +46,15 @@ export function loadCafe(): Promise<Cafe | null> {
       // No connection: use the saved copy, and ask again next time.
       cached = undefined;
       const saved = savedCafe();
-      if (saved) setGstRate(saved.gst_rate_bps);
+      if (saved) {
+        setGstRate(saved.gst_rate_bps);
+        // applyTheme(saved.theme); // themes: on hold
+      }
       return saved;
     }
     if (data) {
       setGstRate(data.gst_rate_bps);
+      // applyTheme(data.theme); // themes: on hold
       try {
         localStorage.setItem(SAVED_KEY, JSON.stringify(data));
       } catch {}
@@ -60,6 +66,7 @@ export function loadCafe(): Promise<Cafe | null> {
 
 /** Sign-out: this device no longer belongs to the café. */
 export function forgetSavedCafe() {
+  // clearTheme(); // themes: on hold
   try {
     localStorage.removeItem(SAVED_KEY);
   } catch {}

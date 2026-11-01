@@ -69,7 +69,7 @@
 }
 
 body {
-  background: #fafaf9;
+  background: var(--color-stone-50);
   color: #1c1917;
 }
 

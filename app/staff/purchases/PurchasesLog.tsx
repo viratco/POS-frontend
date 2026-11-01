@@ -174,7 +174,7 @@ export default function PurchasesLog() {
   const bySupplier = [...supplierTotals.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
 
   return (
-    <div className="min-h-screen bg-[#f6f4f1] text-stone-900">
+    <div className="min-h-screen bg-[color:var(--t-f6f4f1)] text-stone-900">
       <StaffNav />
       <main className="mx-auto max-w-4xl px-4 pt-6 pb-16 sm:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3">

@@ -2,12 +2,13 @@ import type { Viewport } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { supabaseAnon } from "@/lib/supabase/server";
+import { themeOf } from "@/lib/themes";
 import type { Category, MenuItem } from "@/lib/types";
 import MenuClient, { type Brand } from "./MenuClient";
 
 export const viewport: Viewport = { themeColor: "#ffffff" };
 
-type TableInfo = { id: string; name: string; cafe_id?: string; cafe_name?: string; cafe_slug?: string; logo_url?: string | null };
+type TableInfo = { id: string; name: string; cafe_id?: string; cafe_name?: string; cafe_slug?: string; logo_url?: string | null; theme?: string | null };
 
 export default function TablePage({ params }: PageProps<"/t/[token]">) {
   return (
@@ -39,13 +40,15 @@ async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
   };
 
   return (
-    <MenuClient
-      token={token}
-      tableName={table.name}
-      brand={brand}
-      categories={(categories ?? []) as Category[]}
-      items={((items ?? []) as Partial<MenuItem>[]).map(withDefaults)}
-    />
+    <div data-theme={themeOf(table.theme).key}>
+      <MenuClient
+        token={token}
+        tableName={table.name}
+        brand={brand}
+        categories={(categories ?? []) as Category[]}
+        items={((items ?? []) as Partial<MenuItem>[]).map(withDefaults)}
+      />
+    </div>
   );
 }
 

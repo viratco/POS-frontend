@@ -34,7 +34,7 @@ const STATE: Record<TableState, { label: string; hint: string; stripe: string; c
   food_ready: { label: "Food ready", hint: "Serve now", stripe: "bg-sky-500", chip: "bg-sky-100/90 text-sky-800 ring-sky-200", dot: "bg-sky-500", glow: "ring-sky-400" },
   in_kitchen: { label: "In kitchen", hint: "Being cooked", stripe: "bg-amber-400", chip: "bg-amber-100/90 text-amber-900 ring-amber-200", dot: "bg-amber-400", glow: "ring-amber-400" },
   served: { label: "Served", hint: "Bill when asked", stripe: "bg-emerald-500", chip: "bg-emerald-100/90 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500", glow: "ring-emerald-400" },
-  available: { label: "Available", hint: "", stripe: "bg-[#d8cebe]", chip: "bg-[#f4eee4] text-[#786959] ring-[#e2d7c7]", dot: "bg-[#b8aa96]", glow: "ring-[#e2d7c7]" },
+  available: { label: "Available", hint: "", stripe: "bg-[color:var(--t-d8cebe)]", chip: "bg-[color:var(--t-f4eee4)] text-[color:var(--t-786959)] ring-[color:var(--t-e2d7c7)]", dot: "bg-[color:var(--t-b8aa96)]", glow: "ring-[color:var(--t-e2d7c7)]" },
 };
 
 function stateOf(items: OrderItem[] | undefined): TableState {
@@ -538,7 +538,7 @@ export default function Dashboard() {
   const selected = rows.find((r) => r.table.id === selectedId) ?? null;
 
   return (
-    <div className="min-h-screen bg-[#faf7f2] text-[#2a2119]">
+    <div className="min-h-screen bg-[color:var(--t-faf7f2)] text-[color:var(--t-2a2119)]">
       <StaffNav>
         <span
           className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -581,9 +581,9 @@ export default function Dashboard() {
         )}
 
         {noCopy && (
-          <div className="mb-4 rounded-2xl bg-white px-5 py-8 text-center ring-1 ring-[#ded3c2]">
+          <div className="mb-4 rounded-2xl bg-white px-5 py-8 text-center ring-1 ring-[color:var(--t-ded3c2)]">
             <p className="text-lg font-bold">No internet, and this device has no saved copy of your tables yet.</p>
-            <p className="mt-1 text-sm text-[#8a7b6b]">
+            <p className="mt-1 text-sm text-[color:var(--t-8a7b6b)]">
               Open this page once with internet on this device; after that it keeps working offline. Meanwhile, use a phone hotspot or take orders on paper.
             </p>
           </div>
@@ -657,7 +657,7 @@ export default function Dashboard() {
 
         {/* 1. New orders need an OK first */}
         {waitingOrders.length > 0 && (
-          <section className="mt-6 rounded-3xl border border-rose-300 bg-gradient-to-br from-rose-50/90 to-[#fff8f8] p-4.5 shadow-sm sm:p-5">
+          <section className="mt-6 rounded-3xl border border-rose-300 bg-gradient-to-br from-rose-50/90 to-[color:var(--t-fff8f8)] p-4.5 shadow-sm sm:p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2.5 text-lg font-bold text-rose-950">
                 <span className="relative flex h-3.5 w-3.5">
@@ -676,7 +676,7 @@ export default function Dashboard() {
                 <div key={order!.id} className="flex flex-col justify-between rounded-2xl border border-rose-200 bg-white p-4 shadow-sm ring-2 ring-rose-200/50">
                   <div>
                     <div className="flex items-baseline justify-between border-b border-rose-100 pb-2">
-                      <span className="text-2xl font-bold tracking-tight text-[#2a2119]">{table.name}</span>
+                      <span className="text-2xl font-bold tracking-tight text-[color:var(--t-2a2119)]">{table.name}</span>
                       <span className="flex items-center gap-1 text-xs font-semibold text-rose-600">
                         <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
                         {now ? ago(waiting[0].created_at, now) : ""}
@@ -687,7 +687,7 @@ export default function Dashboard() {
                       {waiting.map((i) => (
                         <li key={i.id} className="flex items-start justify-between text-[14px] leading-snug">
                           <div>
-                            <span className="font-bold text-[#2a2119]">{i.qty}×</span> {i.name_snapshot}
+                            <span className="font-bold text-[color:var(--t-2a2119)]">{i.qty}×</span> {i.name_snapshot}
                             {i.options && i.options.length > 0 && <span className="block pl-6 text-sm text-stone-500">{optionsLabel(i.options)}</span>}
                             {i.note && <span className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">{i.note}</span>}
                           </div>
@@ -725,8 +725,8 @@ export default function Dashboard() {
         <section className="mt-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold tracking-tight text-[#2a2119]">Tables &amp; Layout</h2>
-              <span className="rounded-full bg-[#f0e7d8] px-2.5 py-0.5 text-xs font-semibold text-[#6e5d4e]">
+              <h2 className="text-xl font-bold tracking-tight text-[color:var(--t-2a2119)]">Tables &amp; Layout</h2>
+              <span className="rounded-full bg-[color:var(--t-f0e7d8)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--t-6e5d4e)]">
                 {counts.occupied} in use · {counts.available} free
               </span>
             </div>
@@ -734,11 +734,11 @@ export default function Dashboard() {
             <div className="flex flex-wrap items-center gap-2">
               {/* View Switcher: Cards vs Floor Plan */}
               {(
-              <div className="flex items-center rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
+              <div className="flex items-center rounded-xl border border-[color:var(--t-ded3c2)] bg-white p-1 shadow-sm">
                 <button
                   onClick={() => setViewMode("cards")}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                    viewMode === "cards" ? "bg-[#2a2119] text-[#f5ebd9] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                    viewMode === "cards" ? "bg-[color:var(--t-2a2119)] text-[color:var(--t-f5ebd9)] shadow-sm" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
                   }`}
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -752,7 +752,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => setViewMode("floorplan")}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                    viewMode === "floorplan" ? "bg-[#2a2119] text-[#f5ebd9] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                    viewMode === "floorplan" ? "bg-[color:var(--t-2a2119)] text-[color:var(--t-f5ebd9)] shadow-sm" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
                   }`}
                 >
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -764,7 +764,7 @@ export default function Dashboard() {
               )}
 
               {/* Filter Pills */}
-              <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-[#ded3c2] bg-white p-1 shadow-sm">
+              <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-[color:var(--t-ded3c2)] bg-white p-1 shadow-sm">
                 {(
                   [
                     ["all", "All", tables.length],
@@ -777,11 +777,11 @@ export default function Dashboard() {
                     key={key}
                     onClick={() => setFilter(key)}
                     className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      filter === key ? "bg-[#2a2119] text-[#f5ebd9]" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                      filter === key ? "bg-[color:var(--t-2a2119)] text-[color:var(--t-f5ebd9)]" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
                     }`}
                   >
                     {label}
-                    <span className={`rounded-full px-1.5 text-[11px] ${filter === key ? "bg-white/20 text-white" : "bg-[#f4eee4] text-[#6d5e50]"}`}>
+                    <span className={`rounded-full px-1.5 text-[11px] ${filter === key ? "bg-white/20 text-white" : "bg-[color:var(--t-f4eee4)] text-[color:var(--t-6d5e50)]"}`}>
                       {n}
                     </span>
                   </button>
@@ -810,7 +810,7 @@ export default function Dashboard() {
                 <TableCard key={r.table.id} {...r} now={now} selected={r.table.id === selectedId} onClick={() => setSelectedId(r.table.id)} />
               ))}
               {visibleRows.length === 0 && (
-                <p className="col-span-full rounded-2xl border border-[#ded3c2] bg-white py-12 text-center text-[#8a7b6b]">
+                <p className="col-span-full rounded-2xl border border-[color:var(--t-ded3c2)] bg-white py-12 text-center text-[color:var(--t-8a7b6b)]">
                   No tables match this filter right now.
                 </p>
               )}
@@ -855,7 +855,7 @@ export default function Dashboard() {
       {printJob && <PrintSheet job={printJob} cafe={cafe} onClose={() => setPrintJob(null)} />}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 animate-toast rounded-full bg-[#2a2119] px-5 py-3 text-sm font-semibold whitespace-nowrap text-[#f5ebd9] shadow-xl">
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 animate-toast rounded-full bg-[color:var(--t-2a2119)] px-5 py-3 text-sm font-semibold whitespace-nowrap text-[color:var(--t-f5ebd9)] shadow-xl">
           {toast}
         </div>
       )}
@@ -886,8 +886,8 @@ function Stat({
         : tone === "amber"
           ? "bg-amber-50/70 border-amber-200/80 text-amber-950"
           : tone === "gold"
-            ? "bg-[#fffdf8] border-[#ded3c2] text-[#2a2119]"
-            : "bg-white/90 border-[#ebe2d4] text-[#2a2119]";
+            ? "bg-[color:var(--t-fffdf8)] border-[color:var(--t-ded3c2)] text-[color:var(--t-2a2119)]"
+            : "bg-white/90 border-[color:var(--t-ebe2d4)] text-[color:var(--t-2a2119)]";
 
   const iconBg =
     tone === "rose"
@@ -897,17 +897,17 @@ function Stat({
         : tone === "amber"
           ? "bg-amber-100 text-amber-800"
           : tone === "gold"
-            ? "bg-[#f5ebd9] text-[#8a6828]"
-            : "bg-[#f4eee4] text-[#786959]";
+            ? "bg-[color:var(--t-f5ebd9)] text-[color:var(--t-8a6828)]"
+            : "bg-[color:var(--t-f4eee4)] text-[color:var(--t-786959)]";
 
   return (
     <div className={`relative flex flex-col justify-between rounded-2xl border p-4 shadow-sm backdrop-blur-sm transition hover:shadow-md ${toneBg} ${className}`}>
       <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-bold tracking-wider text-[#8a7b6b] uppercase">{label}</span>
+        <span className="text-xs font-bold tracking-wider text-[color:var(--t-8a7b6b)] uppercase">{label}</span>
         {icon && <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${iconBg}`}>{icon}</span>}
       </div>
-      <div className="mt-2 text-2xl font-black tracking-tight tabular-nums text-[#2a2119]">{value}</div>
-      {hint && <div className="mt-0.5 text-xs font-medium text-[#8a7b6b] tabular-nums">{hint}</div>}
+      <div className="mt-2 text-2xl font-black tracking-tight tabular-nums text-[color:var(--t-2a2119)]">{value}</div>
+      {hint && <div className="mt-0.5 text-xs font-medium text-[color:var(--t-8a7b6b)] tabular-nums">{hint}</div>}
     </div>
   );
 }
@@ -915,13 +915,13 @@ function Stat({
 function Legend() {
   const order: TableState[] = ["new_order", "food_ready", "in_kitchen", "served", "available"];
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[#ece3d6] bg-white/70 px-4 py-2.5 text-xs text-[#7a6b5c] backdrop-blur-sm">
-      <span className="font-bold text-[#2a2119] uppercase tracking-wider text-[11px]">Legend:</span>
+    <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[color:var(--t-ece3d6)] bg-white/70 px-4 py-2.5 text-xs text-[color:var(--t-7a6b5c)] backdrop-blur-sm">
+      <span className="font-bold text-[color:var(--t-2a2119)] uppercase tracking-wider text-[11px]">Legend:</span>
       {order.map((s) => (
         <span key={s} className="flex items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${STATE[s].dot}`} />
-          <span className="font-semibold text-[#2a2119]">{STATE[s].label}</span>
-          {STATE[s].hint && <span className="text-[#8a7b6b]">· {STATE[s].hint}</span>}
+          <span className="font-semibold text-[color:var(--t-2a2119)]">{STATE[s].label}</span>
+          {STATE[s].hint && <span className="text-[color:var(--t-8a7b6b)]">· {STATE[s].hint}</span>}
         </span>
       ))}
     </div>
@@ -959,14 +959,14 @@ function TableCard({
     <button
       onClick={onClick}
       className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] ${
-        selected ? "border-[#2a2119] ring-2 ring-[#2a2119]" : "border-[#e5ded4] hover:border-[#cbbfad]"
-      } ${order ? "bg-[#fffdfb] shadow-sm" : "bg-[#fcfaf7]/90 hover:bg-white shadow-xs"}`}
+        selected ? "border-[color:var(--t-2a2119)] ring-2 ring-[color:var(--t-2a2119)]" : "border-[color:var(--t-e5ded4)] hover:border-[color:var(--t-cbbfad)]"
+      } ${order ? "bg-[color:var(--t-fffdfb)] shadow-sm" : "bg-[color:var(--t-fcfaf7)]/90 hover:bg-white shadow-xs"}`}
     >
       {/* Left Accent Stripe */}
       <span className={`absolute inset-y-0 left-0 w-1.5 z-20 ${s.stripe} ${state === "new_order" ? "animate-pulse" : ""}`} />
 
       {/* Realistic Table Hero Image Section */}
-      <div className="relative aspect-[16/11] w-full overflow-hidden bg-gradient-to-b from-[#f5ede0] to-[#ece1cf]/80 p-2">
+      <div className="relative aspect-[16/11] w-full overflow-hidden bg-gradient-to-b from-[color:var(--t-f5ede0)] to-[color:var(--t-ece1cf)]/80 p-2">
         <img
           src={tableImg}
           alt={table.name}
@@ -975,7 +975,7 @@ function TableCard({
 
         {/* Floating Top Header Badges */}
         <div className="absolute inset-x-2.5 top-2.5 flex items-center justify-between gap-1 z-10">
-          <span className="flex items-center gap-1.5 rounded-lg bg-[#2a2119]/85 px-2.5 py-1 text-xs font-bold text-[#f5ebd9] backdrop-blur-md shadow-sm">
+          <span className="flex items-center gap-1.5 rounded-lg bg-[color:var(--t-2a2119)]/85 px-2.5 py-1 text-xs font-bold text-[color:var(--t-f5ebd9)] backdrop-blur-md shadow-sm">
             <span>{table.name}</span>
           </span>
           <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-md ${s.chip}`}>
@@ -984,15 +984,15 @@ function TableCard({
         </div>
 
         {/* Floating Bottom Info on Image */}
-        <div className="absolute inset-x-2.5 bottom-2 flex items-center justify-between text-[11px] font-medium text-[#2a2119] z-10">
+        <div className="absolute inset-x-2.5 bottom-2 flex items-center justify-between text-[11px] font-medium text-[color:var(--t-2a2119)] z-10">
           <span className="flex items-center gap-1 rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold backdrop-blur-xs shadow-xs">
-            <svg viewBox="0 0 24 24" className="h-3 w-3 text-[#a89b88]" fill="none" stroke="currentColor" strokeWidth={2}>
+            <svg viewBox="0 0 24 24" className="h-3 w-3 text-[color:var(--t-a89b88)]" fill="none" stroke="currentColor" strokeWidth={2}>
               <circle cx="12" cy="12" r="9" />
               <path d="M12 7v5l3 2" />
             </svg>
             <span>{order ? (now ? ago(order.created_at, now) : "Open") : "Free"}</span>
           </span>
-          <span className="rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold text-[#6d5e50] backdrop-blur-xs shadow-xs">
+          <span className="rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold text-[color:var(--t-6d5e50)] backdrop-blur-xs shadow-xs">
             4 Seats
           </span>
         </div>
@@ -1013,10 +1013,10 @@ function TableCard({
                 <div key={step.label} className="flex flex-col gap-1">
                   <div
                     className={`h-1.5 rounded-full transition-all ${
-                      idx <= currentStage ? step.color : "bg-[#ece4d8]"
+                      idx <= currentStage ? step.color : "bg-[color:var(--t-ece4d8)]"
                     }`}
                   />
-                  <span className={`text-[9px] font-semibold text-center ${idx === currentStage ? "text-[#2a2119]" : "text-[#a89b88]"}`}>
+                  <span className={`text-[9px] font-semibold text-center ${idx === currentStage ? "text-[color:var(--t-2a2119)]" : "text-[color:var(--t-a89b88)]"}`}>
                     {step.label}
                   </span>
                 </div>
@@ -1032,34 +1032,34 @@ function TableCard({
             </div>
 
             {/* Bottom Row */}
-            <div className="flex items-end justify-between border-t border-[#f0e7d8] pt-2">
-              <span className="min-w-0 text-xs font-medium text-[#8a7b6b]">
+            <div className="flex items-end justify-between border-t border-[color:var(--t-f0e7d8)] pt-2">
+              <span className="min-w-0 text-xs font-medium text-[color:var(--t-8a7b6b)]">
                 {guests.length > 0 && (
-                  <span className="block truncate font-semibold text-[#2a2119]">
+                  <span className="block truncate font-semibold text-[color:var(--t-2a2119)]">
                     👤 {guests[0].name}
                     {guests.length > 1 ? ` +${guests.length - 1}` : ""}
                   </span>
                 )}
                 {liveCount} item{liveCount !== 1 ? "s" : ""}
               </span>
-              <span className="text-xl font-extrabold text-[#2a2119] tabular-nums tracking-tight">
+              <span className="text-xl font-extrabold text-[color:var(--t-2a2119)] tabular-nums tracking-tight">
                 {formatINR(billFor(items).total)}
               </span>
             </div>
           </div>
         ) : (
           <div className="flex flex-1 flex-col justify-between py-1">
-            <p className="text-xs text-[#8a7b6b] leading-relaxed">
+            <p className="text-xs text-[color:var(--t-8a7b6b)] leading-relaxed">
               Available for guests. QR code active on table.
             </p>
-            <div className="mt-3 flex items-center justify-between border-t border-dashed border-[#ece2d4] pt-2 text-xs font-semibold text-[#8a7b6b] group-hover:text-[#2a2119]">
+            <div className="mt-3 flex items-center justify-between border-t border-dashed border-[color:var(--t-ece2d4)] pt-2 text-xs font-semibold text-[color:var(--t-8a7b6b)] group-hover:text-[color:var(--t-2a2119)]">
               <span className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#f4eee4] text-xs font-bold text-[#6d5e50] group-hover:bg-[#2a2119] group-hover:text-white transition">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--t-f4eee4)] text-xs font-bold text-[color:var(--t-6d5e50)] group-hover:bg-[color:var(--t-2a2119)] group-hover:text-white transition">
                   +
                 </span>
                 Start an order
               </span>
-              <span className="rounded bg-[#f4eee4] px-1.5 py-0.5 text-[10px] text-[#6d5e50]">Ready</span>
+              <span className="rounded bg-[color:var(--t-f4eee4)] px-1.5 py-0.5 text-[10px] text-[color:var(--t-6d5e50)]">Ready</span>
             </div>
           </div>
         )}
@@ -1171,7 +1171,7 @@ function TableDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end">
       <div className="absolute inset-0 animate-fade-in bg-stone-900/30 backdrop-blur-[2px]" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-[460px] animate-slide-in flex-col bg-[#fbfaf8] shadow-2xl">
+      <aside className="relative flex h-full w-full max-w-[460px] animate-slide-in flex-col bg-[color:var(--t-fbfaf8)] shadow-2xl">
         {/* header */}
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 bg-white px-5 pt-5 pb-4">
           <div>
@@ -2111,10 +2111,10 @@ function WhatsAppToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
       role="switch"
       aria-checked={on}
       onClick={onToggle}
-      className="flex items-center gap-2 rounded-xl border border-[#ded3c2] bg-white px-3 py-2 text-xs font-semibold text-[#5a4b3d] shadow-sm transition hover:bg-[#fcfaf7]"
+      className="flex items-center gap-2 rounded-xl border border-[color:var(--t-ded3c2)] bg-white px-3 py-2 text-xs font-semibold text-[color:var(--t-5a4b3d)] shadow-sm transition hover:bg-[color:var(--t-fcfaf7)]"
       title="When on, accepting an order opens WhatsApp with the kitchen ticket ready to send"
     >
-      <span className={`relative h-4 w-7 rounded-full transition ${on ? "bg-emerald-500" : "bg-[#ded3c2]"}`}>
+      <span className={`relative h-4 w-7 rounded-full transition ${on ? "bg-emerald-500" : "bg-[color:var(--t-ded3c2)]"}`}>
         <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${on ? "left-3.5" : "left-0.5"}`} />
       </span>
       <span className="hidden md:inline">WhatsApp group</span>

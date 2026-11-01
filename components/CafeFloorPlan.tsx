@@ -36,7 +36,7 @@ const LOOK: Record<TableState, { label: string; fill: string; edge: string; chai
   food_ready: { label: "Food ready", fill: "#e0f2fe", edge: "#0284c7", chair: "#7dd3fc", dot: "#0284c7" },
   in_kitchen: { label: "In kitchen", fill: "#fef3c7", edge: "#d97706", chair: "#fcd34d", dot: "#d97706" },
   served: { label: "Served", fill: "#d1fae5", edge: "#059669", chair: "#6ee7b7", dot: "#059669" },
-  available: { label: "Free", fill: "#efe3cf", edge: "#b9a586", chair: "#ddd0bb", dot: "#b9a586" },
+  available: { label: "Free", fill: "var(--t-efe3cf)", edge: "var(--t-b9a586)", chair: "var(--t-ddd0bb)", dot: "var(--t-b9a586)" },
 };
 
 /** Bill so far, or "3 new" while a guest's first order still waits for staff (new items aren't billed yet). */
@@ -77,13 +77,13 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
       {/* ── The room ── */}
-      <div className="overflow-hidden rounded-3xl border border-[#e2d7c6] bg-[#f3ece1] shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e2d7c6] bg-[#fffdf9] px-5 py-3">
+      <div className="overflow-hidden rounded-3xl border border-[color:var(--t-e2d7c6)] bg-[color:var(--t-f3ece1)] shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--t-e2d7c6)] bg-[color:var(--t-fffdf9)] px-5 py-3">
           <div>
-            <h3 className="text-[15px] font-bold text-[#2a2119]">Floor plan</h3>
-            <p className="text-xs text-[#8a7b6b]">Top view · tap a table to open it</p>
+            <h3 className="text-[15px] font-bold text-[color:var(--t-2a2119)]">Floor plan</h3>
+            <p className="text-xs text-[color:var(--t-8a7b6b)]">Top view · tap a table to open it</p>
           </div>
-          <span className="rounded-full bg-[#f0e7d8] px-3 py-1 text-xs font-semibold text-[#5a4a39]">
+          <span className="rounded-full bg-[color:var(--t-f0e7d8)] px-3 py-1 text-xs font-semibold text-[color:var(--t-5a4a39)]">
             {seated.length} seated · {free.length} free
           </span>
         </div>
@@ -112,14 +112,14 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
           >
             <defs>
               <pattern id="planks" width="46" height="46" patternUnits="userSpaceOnUse">
-                <path d="M0 0H46M0 23H46" stroke="#eadfcd" strokeWidth="1.2" />
-                <path d="M14 0V23M37 23V46" stroke="#eadfcd" strokeWidth="1.2" />
+                <path d="M0 0H46M0 23H46" stroke="var(--t-eadfcd)" strokeWidth="1.2" />
+                <path d="M14 0V23M37 23V46" stroke="var(--t-eadfcd)" strokeWidth="1.2" />
               </pattern>
               <pattern id="grid" width="25" height="25" patternUnits="userSpaceOnUse">
-                <path d="M25 0H0V25" fill="none" stroke="#e6dccd" strokeWidth="1" />
+                <path d="M25 0H0V25" fill="none" stroke="var(--t-e6dccd)" strokeWidth="1" />
               </pattern>
               <filter id="lift" x="-20%" y="-20%" width="140%" height="160%">
-                <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#2a2119" floodOpacity="0.16" />
+                <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="var(--t-2a2119)" floodOpacity="0.16" />
               </filter>
             </defs>
 
@@ -127,14 +127,14 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
             <rect x={VIEW.x} y={VIEW.y} width={VIEW.w} height={VIEW.h} fill="url(#grid)" />
             {plan.floor.map((d) => (
               <g key={d}>
-                <path d={d} fill="#fbf6ee" />
+                <path d={d} fill="var(--t-fbf6ee)" />
                 <path d={d} fill="url(#planks)" />
               </g>
             ))}
 
             {/* walls */}
             {plan.walls.map((d) => (
-              <path key={d} d={d} fill="none" stroke="#2a2119" strokeWidth={10} strokeLinecap="square" strokeLinejoin="miter" />
+              <path key={d} d={d} fill="none" stroke="var(--t-2a2119)" strokeWidth={10} strokeLinecap="square" strokeLinejoin="miter" />
             ))}
 
             {/* entrance: double door swinging in */}
@@ -142,12 +142,12 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
 
             {/* openings between rooms */}
             {plan.openings?.map((o) => (
-              <path key={`${o.x1}-${o.y}`} d={`M${o.x1},${o.y} L${o.x2},${o.y}`} stroke="#d6c8b2" strokeWidth={2} strokeDasharray="6 7" />
+              <path key={`${o.x1}-${o.y}`} d={`M${o.x1},${o.y} L${o.x2},${o.y}`} stroke="var(--t-d6c8b2)" strokeWidth={2} strokeDasharray="6 7" />
             ))}
 
             {/* area labels, e.g. TERRACE */}
             {plan.labels?.map((l) => (
-              <text key={l.text} x={l.x} y={l.y} textAnchor="middle" className="fill-[#b3a28b] text-[16px] font-semibold tracking-[0.25em]">
+              <text key={l.text} x={l.x} y={l.y} textAnchor="middle" className="fill-[color:var(--t-b3a28b)] text-[16px] font-semibold tracking-[0.25em]">
                 {l.text}
               </text>
             ))}
@@ -156,14 +156,14 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
             {plan.counter && (
               <>
                 <g filter="url(#lift)">
-                  <rect x={plan.counter.x} y={plan.counter.y} width={plan.counter.w} height={plan.counter.h} rx={10} fill="#2a2119" />
+                  <rect x={plan.counter.x} y={plan.counter.y} width={plan.counter.w} height={plan.counter.h} rx={10} fill="var(--t-2a2119)" />
                 </g>
                 <text
                   x={plan.counter.x + plan.counter.w / 2}
                   y={plan.counter.y + plan.counter.h / 2}
                   dy="0.35em"
                   textAnchor="middle"
-                  className="fill-[#d9b26f] text-[17px] font-bold tracking-[0.14em]"
+                  className="fill-[color:var(--t-d9b26f)] text-[17px] font-bold tracking-[0.14em]"
                 >
                   {plan.counter.label ?? "COUNTER"}
                 </text>
@@ -193,10 +193,10 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
 
       {/* ── Side list: who's seated, who's free ── */}
       <aside className="flex flex-col gap-4">
-        <div className="rounded-3xl border border-[#e2d7c6] bg-white p-4 shadow-sm">
-          <h3 className="text-[15px] font-bold text-[#2a2119]">Seated now</h3>
+        <div className="rounded-3xl border border-[color:var(--t-e2d7c6)] bg-white p-4 shadow-sm">
+          <h3 className="text-[15px] font-bold text-[color:var(--t-2a2119)]">Seated now</h3>
           {seated.length === 0 ? (
-            <p className="mt-2 text-sm text-[#8a7b6b]">No guests seated.</p>
+            <p className="mt-2 text-sm text-[color:var(--t-8a7b6b)]">No guests seated.</p>
           ) : (
             <ul className="mt-3 space-y-1.5">
               {seated.map((r) => {
@@ -205,16 +205,16 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
                   <li key={r.table.id}>
                     <button
                       onClick={() => onSelectTable(r.table.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[#f7f1e8] ${r.table.id === selectedId ? "bg-[#f3ebdf] ring-1 ring-[#2a2119]/20" : ""}`}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[color:var(--t-f7f1e8)] ${r.table.id === selectedId ? "bg-[color:var(--t-f3ebdf)] ring-1 ring-[color:var(--t-2a2119)]/20" : ""}`}
                     >
                       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: look.dot }} />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-[#2a2119]">{r.table.name}</span>
-                        <span className="block text-xs text-[#8a7b6b]">
+                        <span className="block truncate text-sm font-semibold text-[color:var(--t-2a2119)]">{r.table.name}</span>
+                        <span className="block text-xs text-[color:var(--t-8a7b6b)]">
                           {look.label} · {r.order && now ? ago(r.order.created_at, now) : ""}
                         </span>
                       </span>
-                      <span className="text-sm font-bold text-[#2a2119] tabular-nums">{amountLabel(r)}</span>
+                      <span className="text-sm font-bold text-[color:var(--t-2a2119)] tabular-nums">{amountLabel(r)}</span>
                     </button>
                   </li>
                 );
@@ -223,17 +223,17 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
           )}
         </div>
 
-        <div className="rounded-3xl border border-[#e2d7c6] bg-white p-4 shadow-sm">
-          <h3 className="text-[15px] font-bold text-[#2a2119]">Free tables</h3>
+        <div className="rounded-3xl border border-[color:var(--t-e2d7c6)] bg-white p-4 shadow-sm">
+          <h3 className="text-[15px] font-bold text-[color:var(--t-2a2119)]">Free tables</h3>
           {free.length === 0 ? (
-            <p className="mt-2 text-sm text-[#8a7b6b]">Every table is taken.</p>
+            <p className="mt-2 text-sm text-[color:var(--t-8a7b6b)]">Every table is taken.</p>
           ) : (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {free.map((r) => (
                 <button
                   key={r.table.id}
                   onClick={() => onSelectTable(r.table.id)}
-                  className="rounded-lg bg-[#f4eee4] px-2.5 py-1.5 text-xs font-semibold text-[#5a4a39] transition hover:bg-[#2a2119] hover:text-[#f5ebd9]"
+                  className="rounded-lg bg-[color:var(--t-f4eee4)] px-2.5 py-1.5 text-xs font-semibold text-[color:var(--t-5a4a39)] transition hover:bg-[color:var(--t-2a2119)] hover:text-[color:var(--t-f5ebd9)]"
                 >
                   {r.table.name}
                 </button>
@@ -243,15 +243,15 @@ export default function CafeFloorPlan({ plan, rows, visibleIds, selectedId, onSe
         </div>
 
         {offPlan.length > 0 && (
-          <div className="rounded-3xl border border-dashed border-[#d6c8b2] bg-[#fffdf9] p-4">
-            <h3 className="text-sm font-bold text-[#2a2119]">Not on the floor plan</h3>
-            <p className="mt-0.5 text-xs text-[#8a7b6b]">Only tables named “Table 1”, “Table 2”… that have a spot on the plan are drawn.</p>
+          <div className="rounded-3xl border border-dashed border-[color:var(--t-d6c8b2)] bg-[color:var(--t-fffdf9)] p-4">
+            <h3 className="text-sm font-bold text-[color:var(--t-2a2119)]">Not on the floor plan</h3>
+            <p className="mt-0.5 text-xs text-[color:var(--t-8a7b6b)]">Only tables named “Table 1”, “Table 2”… that have a spot on the plan are drawn.</p>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {offPlan.map((r) => (
                 <button
                   key={r.table.id}
                   onClick={() => onSelectTable(r.table.id)}
-                  className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-[#5a4a39] ring-1 ring-[#e2d7c6] hover:ring-[#2a2119]/40"
+                  className="flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-[color:var(--t-5a4a39)] ring-1 ring-[color:var(--t-e2d7c6)] hover:ring-[color:var(--t-2a2119)]/40"
                 >
                   <span className="h-2 w-2 rounded-full" style={{ background: LOOK[r.state].dot }} />
                   {r.table.name}
@@ -270,14 +270,14 @@ function Entrance({ door: d }: { door: { x1: number; x2: number; y: number } }) 
   const mid = (d.x1 + d.x2) / 2;
   return (
     <>
-      <g stroke="#8a7b6b" strokeWidth={2} fill="none">
+      <g stroke="var(--t-8a7b6b)" strokeWidth={2} fill="none">
         <path d={`M${d.x1},${d.y} L${d.x1},${d.y + r} A${r},${r} 0 0 0 ${d.x1 + r},${d.y}`} strokeDasharray="4 5" />
         <path d={`M${d.x2},${d.y} L${d.x2},${d.y + r} A${r},${r} 0 0 1 ${d.x2 - r},${d.y}`} strokeDasharray="4 5" />
       </g>
-      <text x={mid} y={d.y - 22} textAnchor="middle" className="fill-[#8a7b6b] text-[17px] font-semibold tracking-[0.2em]">
+      <text x={mid} y={d.y - 22} textAnchor="middle" className="fill-[color:var(--t-8a7b6b)] text-[17px] font-semibold tracking-[0.2em]">
         ENTRANCE
       </text>
-      <path d={`M${mid - 9},${d.y - 12} l9,9 l9,-9`} fill="none" stroke="#8a7b6b" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={`M${mid - 9},${d.y - 12} l9,9 l9,-9`} fill="none" stroke="var(--t-8a7b6b)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
     </>
   );
 }
@@ -350,12 +350,12 @@ function TableShape({
 
       {/* selection ring + focus ring */}
       <rect
-        x={s.x - 20} y={s.y - 20} width={s.w + 40} height={s.h + 40} rx={20} fill="none" stroke="#2a2119" strokeWidth={3}
+        x={s.x - 20} y={s.y - 20} width={s.w + 40} height={s.h + 40} rx={20} fill="none" stroke="var(--t-2a2119)" strokeWidth={3}
         className={selected ? "" : "opacity-0 group-focus-visible:opacity-60"}
       />
 
       {chairRects(s).map((c, i) => (
-        <rect key={i} x={c.x} y={c.y} width={c.w} height={c.h} rx={6} fill={occupied ? look.chair : "#e6dccb"} stroke="#fff" strokeWidth={2} />
+        <rect key={i} x={c.x} y={c.y} width={c.w} height={c.h} rx={6} fill={occupied ? look.chair : "var(--t-e6dccb)"} stroke="#fff" strokeWidth={2} />
       ))}
 
       <g filter="url(#lift)">
@@ -367,18 +367,18 @@ function TableShape({
       </g>
 
       {/* Phones: the plan is too small for details, so just a big number (details are in the list below). */}
-      <text x={cx} y={cy} dy="0.35em" textAnchor="middle" className="fill-[#2a2119] text-[44px] font-extrabold sm:hidden">{spotNumber(row.table.name)}</text>
+      <text x={cx} y={cy} dy="0.35em" textAnchor="middle" className="fill-[color:var(--t-2a2119)] text-[44px] font-extrabold sm:hidden">{spotNumber(row.table.name)}</text>
 
       {occupied ? (
         <g className="hidden sm:inline">
-          <text x={cx} y={cy - (s.h > 80 ? 22 : 15)} textAnchor="middle" className="fill-[#2a2119] text-[22px] font-extrabold">{spotNumber(row.table.name)}</text>
-          <text x={cx} y={cy + (s.h > 80 ? 4 : 5)} textAnchor="middle" className="fill-[#2a2119] text-[14px] font-bold">{total}</text>
-          <text x={cx} y={cy + (s.h > 80 ? 24 : 21)} textAnchor="middle" className="fill-[#6d5e50] text-[12px] font-medium">{agoText}</text>
+          <text x={cx} y={cy - (s.h > 80 ? 22 : 15)} textAnchor="middle" className="fill-[color:var(--t-2a2119)] text-[22px] font-extrabold">{spotNumber(row.table.name)}</text>
+          <text x={cx} y={cy + (s.h > 80 ? 4 : 5)} textAnchor="middle" className="fill-[color:var(--t-2a2119)] text-[14px] font-bold">{total}</text>
+          <text x={cx} y={cy + (s.h > 80 ? 24 : 21)} textAnchor="middle" className="fill-[color:var(--t-6d5e50)] text-[12px] font-medium">{agoText}</text>
         </g>
       ) : (
         <g className="hidden sm:inline">
-          <text x={cx} y={cy} dy="0.1em" textAnchor="middle" className="fill-[#5a4a39] text-[28px] font-extrabold">{spotNumber(row.table.name)}</text>
-          <text x={cx} y={cy + 22} textAnchor="middle" className="fill-[#8a7b6b] text-[11px] font-semibold tracking-wider">{seats} SEATS</text>
+          <text x={cx} y={cy} dy="0.1em" textAnchor="middle" className="fill-[color:var(--t-5a4a39)] text-[28px] font-extrabold">{spotNumber(row.table.name)}</text>
+          <text x={cx} y={cy + 22} textAnchor="middle" className="fill-[color:var(--t-8a7b6b)] text-[11px] font-semibold tracking-wider">{seats} SEATS</text>
         </g>
       )}
 
@@ -392,11 +392,11 @@ function EmptySpot({ spot: s }: { spot: Spot }) {
   return (
     <g aria-label={`Table ${s.n} is not set up yet`}>
       {chairRects(s).map((c, i) => (
-        <rect key={i} x={c.x} y={c.y} width={c.w} height={c.h} rx={6} fill="none" stroke="#cdbfa8" strokeWidth={1.5} strokeDasharray="4 4" />
+        <rect key={i} x={c.x} y={c.y} width={c.w} height={c.h} rx={6} fill="none" stroke="var(--t-cdbfa8)" strokeWidth={1.5} strokeDasharray="4 4" />
       ))}
-      <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={12} fill="#faf6ef" stroke="#cdbfa8" strokeWidth={2} strokeDasharray="6 5" />
-      <text x={s.x + s.w / 2} y={s.y + s.h / 2} dy="0.1em" textAnchor="middle" className="fill-[#b9a586] text-[24px] font-extrabold">{s.n}</text>
-      <text x={s.x + s.w / 2} y={s.y + s.h / 2 + 20} textAnchor="middle" className="fill-[#b9a586] text-[10px] font-semibold tracking-wider">NOT SET UP</text>
+      <rect x={s.x} y={s.y} width={s.w} height={s.h} rx={12} fill="var(--t-faf6ef)" stroke="var(--t-cdbfa8)" strokeWidth={2} strokeDasharray="6 5" />
+      <text x={s.x + s.w / 2} y={s.y + s.h / 2} dy="0.1em" textAnchor="middle" className="fill-[color:var(--t-b9a586)] text-[24px] font-extrabold">{s.n}</text>
+      <text x={s.x + s.w / 2} y={s.y + s.h / 2 + 20} textAnchor="middle" className="fill-[color:var(--t-b9a586)] text-[10px] font-semibold tracking-wider">NOT SET UP</text>
     </g>
   );
 }

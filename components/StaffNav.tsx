@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { forgetSavedCafe, initial, useCafe } from "@/lib/cafe";
 import { forgetCafeData, readQueue } from "@/lib/offline/store";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import ReadyPopup from "./ReadyPopup";
 
 const links = [
   { href: "/staff", label: "Tables", icon: "M4 5h16v4H4zM6 9v10M18 9v10" },
@@ -37,18 +38,19 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
   }
 
   return (
-    <header className="no-print sticky top-0 z-30 border-b border-[#ece3d6] bg-[#fdfbf7]/95 backdrop-blur-md">
+    <>
+    <header className="no-print sticky top-0 z-30 border-b border-[color:var(--t-ece3d6)] bg-[color:var(--t-fdfbf7)]/95 backdrop-blur-md">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
         <div className="flex shrink-0 items-center gap-2.5 pr-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#2a1a10] font-poster text-lg text-[#ecd5b1] italic shadow-sm">{initial(cafe?.name)}</div>
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:var(--t-2a1a10)] font-poster text-lg text-[color:var(--t-ecd5b1)] italic shadow-sm">{initial(cafe?.name)}</div>
           <div className="hidden leading-tight sm:block">
-            <div className="max-w-[12rem] truncate text-[15px] font-bold tracking-tight text-[#2a2119]">{cafe?.name ?? "\u00a0"}</div>
-            <div className="text-[11px] font-semibold tracking-wider text-[#8a7b6b] uppercase">Staff POS</div>
+            <div className="max-w-[12rem] truncate text-[15px] font-bold tracking-tight text-[color:var(--t-2a2119)]">{cafe?.name ?? "\u00a0"}</div>
+            <div className="text-[11px] font-semibold tracking-wider text-[color:var(--t-8a7b6b)] uppercase">Staff POS</div>
           </div>
         </div>
 
         {/* Scrolls sideways on phones instead of pushing the page wider than the screen. */}
-        <nav className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[#ded3c2] bg-[#f4ece0]/70 p-1 [scrollbar-width:none]">
+        <nav className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[color:var(--t-ded3c2)] bg-[color:var(--t-f4ece0)]/70 p-1 [scrollbar-width:none]">
           {links.map((l) => {
             const on = pathname === l.href;
             return (
@@ -58,7 +60,7 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
                 // Preloaded in the background so tabs open instantly. (This bar only shows when signed
                 // in, and signing in/out reloads the page, so no signed-out redirect gets cached.)
                 className={`relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
-                  on ? "bg-white text-[#2a2119] shadow-sm" : "text-[#7a6b5c] hover:text-[#2a2119]"
+                  on ? "bg-white text-[color:var(--t-2a2119)] shadow-sm" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
                 }`}
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -76,7 +78,7 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
           <button
             onClick={signOut}
             title="Sign out"
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-[#8a7b6b] transition hover:bg-[#f0e7d8] hover:text-[#2a2119]"
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-[color:var(--t-8a7b6b)] transition hover:bg-[color:var(--t-f0e7d8)] hover:text-[color:var(--t-2a2119)]"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
               <path d="M15 4h3a2 2 0 012 2v12a2 2 0 01-2 2h-3M10 17l5-5-5-5M15 12H4" />
@@ -85,6 +87,9 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
         </div>
       </div>
     </header>
+    {/* Outside the header: its blur would trap a full-screen popup inside the bar. */}
+    <ReadyPopup />
+    </>
   );
 }
 
@@ -96,7 +101,7 @@ function PendingBar() {
       aria-hidden
       className={`pointer-events-none absolute inset-x-2 bottom-0.5 h-0.5 overflow-hidden rounded-full transition-opacity ${pending ? "opacity-100" : "opacity-0"}`}
     >
-      <span className="block h-full w-1/2 animate-navbar rounded-full bg-[#2a2119]" />
+      <span className="block h-full w-1/2 animate-navbar rounded-full bg-[color:var(--t-2a2119)]" />
     </span>
   );
 }

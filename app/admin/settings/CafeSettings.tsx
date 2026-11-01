@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
 import { type Cafe, forgetCafe, useCafe } from "@/lib/cafe";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { applyTheme, THEMES, themeOf } from "@/lib/themes";
 
 // The café's own details, printed on every bill and tax invoice.
 type Draft = {
@@ -78,7 +79,7 @@ export default function CafeSettings() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f6f4f1]">
+    <div className="min-h-screen bg-[color:var(--t-f6f4f1)]">
       <StaffNav />
       <main className="mx-auto max-w-2xl px-5 py-8">
         <h1 className="text-2xl font-bold tracking-tight">Café settings</h1>
@@ -134,8 +135,79 @@ export default function CafeSettings() {
             )}
           </form>
         )}
+
+        {/* Themes are on hold for now. To bring them back: run RUN_THIS_themes.sql, uncomment this and the lines marked "themes" in lib/cafe.ts and app/layout.tsx.
+        {cafe && <ThemePicker key={cafe.id} cafeId={cafe.id} current={cafe.theme} />}
+        */}
       </main>
     </div>
+  );
+}
+
+// Colours the staff screens, the guest QR menu and the printed QR cards. (On hold, see above.)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function ThemePicker({ cafeId, current }: { cafeId: string; current?: string | null }) {
+  const [chosen, setChosen] = useState(themeOf(current).key);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function pick(key: typeof chosen) {
+    const before = chosen;
+    setChosen(key);
+    applyTheme(key); // shows straight away on this screen
+    setSaving(true);
+    setMsg(null);
+    const { error } = await supabaseBrowser().from("cafes").update({ theme: key }).eq("id", cafeId);
+    setSaving(false);
+    if (error) {
+      setChosen(before);
+      applyTheme(before);
+      setMsg({ ok: false, text: "Couldn't save the theme. Check your internet and try again." });
+      return;
+    }
+    forgetCafe();
+    setMsg({ ok: true, text: `${themeOf(key).name} is on. Guests see it the next time they open the menu.` });
+  }
+
+  return (
+    <section className="mt-6 rounded-2xl bg-white p-5 ring-1 ring-stone-200 sm:p-6">
+      <h2 className="text-lg font-bold tracking-tight">Theme</h2>
+      <p className="text-sm text-stone-500">Colours for your staff screens, guest QR menu and printed QR cards. Bills stay black and white.</p>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {THEMES.map((t) => {
+          const on = chosen === t.key;
+          return (
+            <button
+              key={t.key}
+              disabled={saving}
+              aria-pressed={on}
+              onClick={() => pick(t.key)}
+              className={`overflow-hidden rounded-2xl text-left transition active:scale-[0.98] ${on ? "ring-2 ring-stone-900" : "ring-1 ring-stone-200 hover:ring-stone-400"}`}
+            >
+              {/* A tiny version of the app in this theme's own colours. */}
+              <div data-theme={t.key} className="bg-stone-100 p-3">
+                <div className="rounded-lg bg-[color:var(--t-surface)] p-2 shadow-sm">
+                  <div className="h-1.5 w-3/4 rounded-full bg-stone-800" />
+                  <div className="mt-1.5 h-1.5 w-1/2 rounded-full bg-stone-300" />
+                  <div className="mt-2 flex gap-1">
+                    <span className="h-5 flex-1 rounded-md bg-stone-900" />
+                    <span className="h-5 w-5 rounded-md" style={{ background: t.qr.from }} />
+                  </div>
+                </div>
+              </div>
+              <div className="px-3 py-2">
+                <div className="flex items-center justify-between gap-1 text-sm font-bold">
+                  {t.name}
+                  {on && <span aria-hidden>✓</span>}
+                </div>
+                <div className="text-xs text-stone-500">{t.note}</div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {msg && <p className={`mt-3 text-sm font-medium ${msg.ok ? "text-emerald-700" : "text-red-600"}`}>{msg.text}</p>}
+    </section>
   );
 }
 

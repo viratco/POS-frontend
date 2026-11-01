@@ -23,7 +23,7 @@ const BEST_SELLER_POSTER = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/o
 /** The café this table belongs to. */
 export type Brand = { name: string; slug: string; logoUrl: string | null };
 
-const INK = "text-[#1a202c]";
+const INK = "text-[color:var(--t-1a202c)]";
 const GUEST_KEY = "sohees.guest";
 
 // "+91 98765 43210" / "098765 43210" -> "9876543210"
@@ -33,7 +33,7 @@ function normalisePhone(input: string) {
   if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
   return d;
 }
-const GREY = "text-[#718096]";
+const GREY = "text-[color:var(--t-718096)]";
 
 export default function MenuClient({
   token,
@@ -225,7 +225,7 @@ export default function MenuClient({
     : [];
 
   return (
-    <div className={`min-h-screen bg-white ${INK}`}>
+    <div className={`min-h-screen bg-[color:var(--t-surface)] ${INK}`}>
       {searching ? (
         <SearchHeader query={query} onQuery={setQuery} onClose={() => (setSearching(false), setQuery(""))} />
       ) : current ? (
@@ -256,7 +256,7 @@ export default function MenuClient({
           </ul>
         ) : !current ? (
           <>
-            <h1 className="px-5 pt-6 pb-7 text-[1.6rem] leading-tight font-bold text-[#2d3748]">What would you like to order?</h1>
+            <h1 className="px-5 pt-6 pb-7 text-[1.6rem] leading-tight font-bold text-[color:var(--t-2d3748)]">What would you like to order?</h1>
             <div className="grid grid-cols-2 gap-4 px-5">
               {tiles.map((t) => (
                 <CategoryTile key={t.id} tile={t} onClick={() => open(t.id)} />
@@ -266,8 +266,8 @@ export default function MenuClient({
         ) : (
           <>
             <div className="pt-10 pb-2 text-center">
-              <h2 className="inline-block text-[1.35rem] font-bold text-[#2d3748]">{activeSub && subs.length > 1 ? activeSub.name : current.name}</h2>
-              <div className="mx-auto mt-1.5 h-[3px] w-[70px] rounded-full bg-[#2d3748]" />
+              <h2 className="inline-block text-[1.35rem] font-bold text-[color:var(--t-2d3748)]">{activeSub && subs.length > 1 ? activeSub.name : current.name}</h2>
+              <div className="mx-auto mt-1.5 h-[3px] w-[70px] rounded-full bg-[color:var(--t-2d3748)]" />
             </div>
 
             {listItems.length === 0 ? (
@@ -288,7 +288,7 @@ export default function MenuClient({
       {picking && current && (
         <Sheet onClose={() => setPicking(false)}>
           <h2 className="text-lg font-bold">Menu</h2>
-          <ul className="mt-2 divide-y divide-[#edf2f7]">
+          <ul className="mt-2 divide-y divide-[color:var(--t-edf2f7)]">
             {tiles.map((t) => (
               <li key={t.id}>
                 <button
@@ -312,7 +312,7 @@ export default function MenuClient({
         <div className="fixed inset-x-0 bottom-0 z-30 animate-rise px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             onClick={() => setReviewing(true)}
-            className="mx-auto flex w-full max-w-md items-center justify-between rounded-2xl bg-[#1a202c] px-5 py-4 text-white shadow-[0_12px_30px_-10px_rgba(0,0,0,0.6)] transition active:scale-[0.98]"
+            className="mx-auto flex w-full max-w-md items-center justify-between rounded-2xl bg-[color:var(--t-1a202c)] px-5 py-4 text-white shadow-[0_12px_30px_-10px_rgba(0,0,0,0.6)] transition active:scale-[0.98]"
           >
             <span className="text-left leading-tight">
               <span className="block text-xs text-white/70">
@@ -334,7 +334,7 @@ export default function MenuClient({
             <span className={`text-sm ${GREY}`}>{tableName}</span>
           </div>
 
-          <ul className="mt-3 divide-y divide-[#edf2f7]">
+          <ul className="mt-3 divide-y divide-[color:var(--t-edf2f7)]">
             {cartLines.map(([id, line]) => {
               const item = byId.get(line.itemId);
               if (!item) return null;
@@ -358,20 +358,20 @@ export default function MenuClient({
                     onChange={(e) => setNote(id, e.target.value)}
                     maxLength={200}
                     placeholder="Add cooking instructions (optional)"
-                    className="mt-3 w-full rounded-xl border border-[#e2e8f0] px-3 py-2.5 text-sm outline-none placeholder:text-[#a0aec0] focus:border-[#1a202c]"
+                    className="mt-3 w-full rounded-xl border border-[color:var(--t-e2e8f0)] px-3 py-2.5 text-sm outline-none placeholder:text-[color:var(--t-a0aec0)] focus:border-[color:var(--t-1a202c)]"
                   />
                 </li>
               );
             })}
           </ul>
 
-          <div className="mt-2 flex justify-between border-t border-[#edf2f7] pt-4 font-semibold">
+          <div className="mt-2 flex justify-between border-t border-[color:var(--t-edf2f7)] pt-4 font-semibold">
             <span>Item total</span>
             <span className="tabular-nums">{formatINR(total)}</span>
           </div>
           <p className={`mt-1 text-xs ${GREY}`}>Taxes are added to your final bill.</p>
 
-          <section className="mt-5 rounded-2xl bg-[#f7fafc] p-4">
+          <section className="mt-5 rounded-2xl bg-[color:var(--t-f7fafc)] p-4">
             <h3 className="font-bold">Your details</h3>
             <p className={`text-xs ${GREY}`}>So we know who ordered and can reach you about this order.</p>
             <label className="mt-3 block">
@@ -382,16 +382,16 @@ export default function MenuClient({
                 autoComplete="name"
                 maxLength={60}
                 placeholder="Your name"
-                className={`mt-1 h-12 w-full rounded-xl border bg-white px-3 text-[16px] outline-none focus:border-[#1a202c] ${
-                  showGuestErrors && !guestNameOk ? "border-red-400" : "border-[#e2e8f0]"
+                className={`mt-1 h-12 w-full rounded-xl border bg-white px-3 text-[16px] outline-none focus:border-[color:var(--t-1a202c)] ${
+                  showGuestErrors && !guestNameOk ? "border-red-400" : "border-[color:var(--t-e2e8f0)]"
                 }`}
               />
             </label>
             <label className="mt-3 block">
               <span className="text-sm font-semibold">Mobile number</span>
               <div
-                className={`mt-1 flex h-12 items-center rounded-xl border bg-white focus-within:border-[#1a202c] ${
-                  showGuestErrors && !guestPhoneOk ? "border-red-400" : "border-[#e2e8f0]"
+                className={`mt-1 flex h-12 items-center rounded-xl border bg-white focus-within:border-[color:var(--t-1a202c)] ${
+                  showGuestErrors && !guestPhoneOk ? "border-red-400" : "border-[color:var(--t-e2e8f0)]"
                 }`}
               >
                 <span className={`pl-3 pr-1 text-[16px] ${GREY}`}>+91</span>
@@ -431,7 +431,7 @@ export default function MenuClient({
           <button
             onClick={submit}
             disabled={pending || count === 0}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#1a202c] py-4 text-base font-bold text-white transition active:scale-[0.98] disabled:opacity-60"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--t-1a202c)] py-4 text-base font-bold text-white transition active:scale-[0.98] disabled:opacity-60"
           >
             {pending ? (
               <>
@@ -454,14 +454,14 @@ export default function MenuClient({
 
 function BrandHeader({ brand, tableName }: { brand: Brand; tableName: string }) {
   return (
-    <header className="sticky top-0 z-20 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+    <header className="sticky top-0 z-20 bg-[color:var(--t-surface)] shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
       <div className="mx-auto flex max-w-md items-center gap-3 px-5 py-3">
         <Logo brand={brand} />
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="truncate text-lg font-bold text-[#2d3748]">{brand.name}</div>
+          <div className="truncate text-lg font-bold text-[color:var(--t-2d3748)]">{brand.name}</div>
           <div className={`truncate text-[15px] ${GREY}`}>{tableName}</div>
         </div>
-        <span className="rounded-lg border-[1.5px] border-[#2d3748] px-4 py-1.5 text-[15px] font-medium text-[#2d3748]">Dine In</span>
+        <span className="rounded-lg border-[1.5px] border-[color:var(--t-2d3748)] px-4 py-1.5 text-[15px] font-medium text-[color:var(--t-2d3748)]">Dine In</span>
       </div>
     </header>
   );
@@ -531,14 +531,14 @@ function CategoryHeader({
   return (
     <>
     <div aria-hidden style={{ height: spacer }} />
-    <header ref={headerRef} className="fixed inset-x-0 top-0 z-20 bg-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.12)]">
+    <header ref={headerRef} className="fixed inset-x-0 top-0 z-20 bg-[color:var(--t-surface)] shadow-[0_6px_14px_-6px_rgba(0,0,0,0.12)]">
       <div className="mx-auto max-w-md">
         <div className="flex h-16 items-center gap-3 px-5">
           <button onClick={onBack} aria-label="Back" className="-ml-1 p-1">
             <BackIcon />
           </button>
           {scrolled ? (
-            <button onClick={onOpenPicker} className="flex min-w-0 items-center gap-2 text-[1.35rem] font-bold text-[#2d3748] uppercase">
+            <button onClick={onOpenPicker} className="flex min-w-0 items-center gap-2 text-[1.35rem] font-bold text-[color:var(--t-2d3748)] uppercase">
               <span className="truncate">{current.name}</span>
               <svg viewBox="0 0 12 8" className="h-2.5 w-3 shrink-0" fill="currentColor">
                 <path d="M0 0h12L6 8z" />
@@ -564,7 +564,7 @@ function CategoryHeader({
                   data-on={on}
                   onClick={() => onPickTile(t.id)}
                   className={`shrink-0 rounded-full px-5 py-2.5 text-[17px] whitespace-nowrap ${
-                    on ? "bg-black font-medium text-white" : "text-[#4a5568]"
+                    on ? "bg-black font-medium text-white" : "text-[color:var(--t-4a5568)]"
                   }`}
                 >
                   {t.name}
@@ -581,20 +581,20 @@ function CategoryHeader({
               return (
                 <button key={s.name} data-on={on} onClick={() => onPickSub(s.name)} className="flex w-[74px] shrink-0 flex-col items-center">
                   <div
-                    className={`h-[74px] w-[74px] overflow-hidden rounded-xl bg-[#2a1a10] shadow-[0_2px_6px_rgba(0,0,0,0.12)] ${
-                      on ? "ring-[2.5px] ring-black" : "ring-1 ring-[#edf2f7]"
+                    className={`h-[74px] w-[74px] overflow-hidden rounded-xl bg-[color:var(--t-2a1a10)] shadow-[0_2px_6px_rgba(0,0,0,0.12)] ${
+                      on ? "ring-[2.5px] ring-black" : "ring-1 ring-[color:var(--t-edf2f7)]"
                     }`}
                   >
                     {s.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={s.image} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="flex h-full w-full items-center justify-center px-1 text-center font-poster text-[15px] leading-none text-[#e8d2b0] uppercase">
+                      <div className="flex h-full w-full items-center justify-center px-1 text-center font-poster text-[15px] leading-none text-[color:var(--t-e8d2b0)] uppercase">
                         {s.name}
                       </div>
                     )}
                   </div>
-                  <span className={`mt-2 line-clamp-2 min-h-10 text-center text-[13.5px] leading-tight ${on ? "font-semibold" : "text-[#4a5568]"}`}>
+                  <span className={`mt-2 line-clamp-2 min-h-10 text-center text-[13.5px] leading-tight ${on ? "font-semibold" : "text-[color:var(--t-4a5568)]"}`}>
                     {s.name}
                   </span>
                   <span className={`h-[3px] w-full rounded-full ${on ? "bg-black" : "bg-transparent"}`} />
@@ -611,7 +611,7 @@ function CategoryHeader({
 
 function SearchHeader({ query, onQuery, onClose }: { query: string; onQuery: (q: string) => void; onClose: () => void }) {
   return (
-    <header className="sticky top-0 z-20 bg-white shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
+    <header className="sticky top-0 z-20 bg-[color:var(--t-surface)] shadow-[0_2px_10px_rgba(0,0,0,0.08)]">
       <div className="mx-auto flex h-16 max-w-md items-center gap-3 px-5">
         <button onClick={onClose} aria-label="Close search" className="-ml-1 p-1">
           <BackIcon />
@@ -621,7 +621,7 @@ function SearchHeader({ query, onQuery, onClose }: { query: string; onQuery: (q:
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Search dishes"
-          className="h-11 flex-1 rounded-xl bg-[#f7fafc] px-4 text-[16px] outline-none ring-1 ring-[#e2e8f0] focus:ring-[#1a202c]"
+          className="h-11 flex-1 rounded-xl bg-[color:var(--t-f7fafc)] px-4 text-[16px] outline-none ring-1 ring-[color:var(--t-e2e8f0)] focus:ring-[color:var(--t-1a202c)]"
         />
       </div>
     </header>
@@ -630,11 +630,11 @@ function SearchHeader({ query, onQuery, onClose }: { query: string; onQuery: (q:
 
 function VegToggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-[17px] text-[#2d3748]">
+    <button role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex items-center gap-2.5 text-[17px] text-[color:var(--t-2d3748)]">
       Veg only
-      <span className={`relative h-6 w-11 rounded-full transition ${on ? "bg-[#38a169]" : "bg-[#e2e8f0]"}`}>
+      <span className={`relative h-6 w-11 rounded-full transition ${on ? "bg-[#38a169]" : "bg-[color:var(--t-e2e8f0)]"}`}>
         <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-all ${on ? "left-[22px] bg-white" : "left-0.5 bg-[#2d3748]"}`}
+          className={`absolute top-0.5 h-5 w-5 rounded-full shadow transition-all ${on ? "left-[22px] bg-white" : "left-0.5 bg-[color:var(--t-2d3748)]"}`}
         />
       </span>
     </button>
@@ -658,7 +658,7 @@ function Logo({ brand }: { brand: Brand }) {
     );
   }
   return (
-    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#1b2a41] font-poster text-[11px] leading-none text-[#d9c6a0] italic">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[color:var(--t-1b2a41)] font-poster text-[11px] leading-none text-[color:var(--t-d9c6a0)] italic">
       {brand.name.split(/\s+/)[0]}
     </div>
   );
@@ -672,7 +672,7 @@ function CategoryTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="relative aspect-[5/6] overflow-hidden rounded-2xl bg-[#2a1a10] text-left transition active:scale-[0.97]"
+      className="relative aspect-[5/6] overflow-hidden rounded-2xl bg-[color:var(--t-2a1a10)] text-left transition active:scale-[0.97]"
     >
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -684,7 +684,7 @@ function CategoryTile({ tile, onClick }: { tile: Tile; onClick: () => void }) {
         />
       ) : (
         // No photo yet: poster-style lettering on the brand's chocolate background.
-        <div className="absolute inset-x-0 top-0 px-3 pt-4 text-center font-poster text-[2.4rem] leading-[0.85] tracking-[-0.03em] text-[#e8d2b0] uppercase">
+        <div className="absolute inset-x-0 top-0 px-3 pt-4 text-center font-poster text-[2.4rem] leading-[0.85] tracking-[-0.03em] text-[color:var(--t-e8d2b0)] uppercase">
           {tile.name}
         </div>
       )}
@@ -698,7 +698,7 @@ function ItemRow({ item, qty, onQty, onCustomize }: { item: MenuItem; qty: numbe
   const soldOut = !item.is_available;
   const customizable = item.options.length > 0;
   return (
-    <li className={`border-b border-dashed border-[#cbd5e0] px-5 py-7 last:border-b-0 ${soldOut ? "opacity-50" : ""}`}>
+    <li className={`border-b border-dashed border-[color:var(--t-cbd5e0)] px-5 py-7 last:border-b-0 ${soldOut ? "opacity-50" : ""}`}>
       <div className="flex gap-5">
         {item.image_url && (
           <div className="relative h-[118px] w-[118px] shrink-0">
@@ -722,14 +722,14 @@ function ItemRow({ item, qty, onQty, onCustomize }: { item: MenuItem; qty: numbe
               ) : customizable ? (
                 <button
                   onClick={onCustomize}
-                  className="h-11 w-full rounded-lg border border-[#edf2f7] bg-white text-[18px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition active:scale-95"
+                  className="h-11 w-full rounded-lg border border-[color:var(--t-edf2f7)] bg-white text-[18px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition active:scale-95"
                 >
                   {qty > 0 ? `ADD · ${qty}` : "ADD"}
                 </button>
               ) : qty === 0 ? (
                 <button
                   onClick={() => onQty(1)}
-                  className="h-11 w-full rounded-lg border border-[#edf2f7] bg-white text-[18px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition active:scale-95"
+                  className="h-11 w-full rounded-lg border border-[color:var(--t-edf2f7)] bg-white text-[18px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition active:scale-95"
                 >
                   ADD
                 </button>
@@ -763,7 +763,7 @@ function OptionsSheet({ item, onClose, onAdd }: { item: MenuItem; onClose: () =>
 
   return (
     <Sheet onClose={onClose}>
-      <div className="-mx-5 -mt-3 flex items-center justify-between border-b border-[#edf2f7] px-5 pt-1 pb-4">
+      <div className="-mx-5 -mt-3 flex items-center justify-between border-b border-[color:var(--t-edf2f7)] px-5 pt-1 pb-4">
         <div className="flex min-w-0 items-center gap-2">
           <DietMark diet={item.diet} />
           <h2 className="truncate text-xl font-bold">{item.name}</h2>
@@ -778,7 +778,7 @@ function OptionsSheet({ item, onClose, onAdd }: { item: MenuItem; onClose: () =>
         const single = g.max === 1;
         return (
           <section key={g.name} className="-mx-5 mt-4">
-            <div className="flex items-baseline justify-between bg-[#f7fafc] px-5 py-3">
+            <div className="flex items-baseline justify-between bg-[color:var(--t-f7fafc)] px-5 py-3">
               <span className="text-[17px] font-bold">{g.name}</span>
               <span className={`text-sm ${GREY}`}>
                 {g.min > 0 ? "Required · " : ""}
@@ -796,7 +796,7 @@ function OptionsSheet({ item, onClose, onAdd }: { item: MenuItem; onClose: () =>
                         {c.price > 0 && <span className={`tabular-nums ${GREY}`}>+ {formatINR(c.price)}</span>}
                         <span
                           className={`flex h-6 w-6 items-center justify-center border-2 ${single ? "rounded-full" : "rounded-md"} ${
-                            on ? "border-black" : "border-[#cbd5e0]"
+                            on ? "border-black" : "border-[color:var(--t-cbd5e0)]"
                           }`}
                         >
                           {on && <span className={`h-3 w-3 bg-black ${single ? "rounded-full" : "rounded-sm"}`} />}
@@ -825,15 +825,15 @@ function OptionsSheet({ item, onClose, onAdd }: { item: MenuItem; onClose: () =>
 
 function NextCard({ label, image, onClick }: { label: string; image: string | null; onClick: () => void }) {
   return (
-    <div className="border-t border-dashed border-[#cbd5e0] px-5 pt-8">
+    <div className="border-t border-dashed border-[color:var(--t-cbd5e0)] px-5 pt-8">
       <button onClick={onClick} className="ml-auto flex w-[62%] flex-col items-end">
-        <div className="flex w-full items-center gap-4 rounded-xl border border-[#e2e8f0] p-1.5 text-left">
-          <div className="h-[72px] w-[90px] shrink-0 overflow-hidden rounded-lg bg-[#2a1a10]">
+        <div className="flex w-full items-center gap-4 rounded-xl border border-[color:var(--t-e2e8f0)] p-1.5 text-left">
+          <div className="h-[72px] w-[90px] shrink-0 overflow-hidden rounded-lg bg-[color:var(--t-2a1a10)]">
             {image ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={image} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full w-full items-center justify-center px-1 text-center font-poster text-sm leading-none text-[#e8d2b0] uppercase">
+              <div className="flex h-full w-full items-center justify-center px-1 text-center font-poster text-sm leading-none text-[color:var(--t-e8d2b0)] uppercase">
                 {label}
               </div>
             )}
@@ -853,7 +853,7 @@ function NextCard({ label, image, onClick }: { label: string; image: string | nu
 
 function Stepper({ qty, onQty }: { qty: number; onQty: (q: number) => void }) {
   return (
-    <div className="flex h-11 items-center justify-between rounded-lg border border-[#edf2f7] bg-white text-[17px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+    <div className="flex h-11 items-center justify-between rounded-lg border border-[color:var(--t-edf2f7)] bg-white text-[17px] font-bold text-black shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
       <button onClick={() => onQty(qty - 1)} className="h-full px-3 leading-none" aria-label="Decrease">
         −
       </button>
@@ -879,10 +879,10 @@ function Sheet({ onClose, children }: { onClose: () => void; children: React.Rea
       <div
         role="dialog"
         aria-modal="true"
-        className={`mx-auto max-h-[88vh] w-full max-w-md animate-sheet-up overflow-y-auto rounded-t-3xl bg-white px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] ${INK}`}
+        className={`mx-auto max-h-[88vh] w-full max-w-md animate-sheet-up overflow-y-auto rounded-t-3xl bg-[color:var(--t-surface)] px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] ${INK}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[#e2e8f0]" />
+        <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[color:var(--t-e2e8f0)]" />
         {children}
       </div>
     </div>
@@ -904,7 +904,7 @@ function Confirmation({
 }) {
   const placedTotal = placed.reduce((s, i) => s + i.price_paise_snapshot * i.qty, 0);
   return (
-    <div className={`min-h-screen bg-white ${INK}`}>
+    <div className={`min-h-screen bg-[color:var(--t-surface)] ${INK}`}>
       <BrandHeader brand={brand} tableName={tableName} />
       <main className="mx-auto w-full max-w-md px-5 pt-12 pb-10">
         <div className="flex flex-col items-center text-center">
@@ -915,7 +915,7 @@ function Confirmation({
           </div>
           <h1 className="mt-6 text-2xl font-bold">Order received!</h1>
           <p className={`mt-2 ${GREY}`}>
-            Our staff will confirm your order for <span className="font-semibold text-[#2d3748]">{tableName}</span> and send it to the
+            Our staff will confirm your order for <span className="font-semibold text-[color:var(--t-2d3748)]">{tableName}</span> and send it to the
             kitchen right away.
           </p>
           {counterAway && (
@@ -925,9 +925,9 @@ function Confirmation({
           )}
         </div>
 
-        <div className="mt-8 rounded-2xl border border-[#edf2f7] p-5">
+        <div className="mt-8 rounded-2xl border border-[color:var(--t-edf2f7)] p-5">
           <h2 className={`text-sm font-semibold ${GREY}`}>What you ordered</h2>
-          <ul className="mt-2 divide-y divide-[#edf2f7]">
+          <ul className="mt-2 divide-y divide-[color:var(--t-edf2f7)]">
             {placed.map((i) => (
               <li key={i.id} className="flex justify-between gap-3 py-3">
                 <div>
@@ -941,7 +941,7 @@ function Confirmation({
               </li>
             ))}
           </ul>
-          <div className="mt-2 flex justify-between border-t border-[#edf2f7] pt-3 font-semibold">
+          <div className="mt-2 flex justify-between border-t border-[color:var(--t-edf2f7)] pt-3 font-semibold">
             <span>This order</span>
             <span className="tabular-nums">{formatINR(placedTotal)}</span>
           </div>
@@ -949,7 +949,7 @@ function Confirmation({
 
         <p className={`mt-4 text-center text-sm ${GREY}`}>Taxes are added to your final bill. Pay at the counter.</p>
 
-        <button onClick={onAgain} className="mt-8 w-full rounded-2xl bg-[#1a202c] py-4 font-bold text-white transition active:scale-[0.98]">
+        <button onClick={onAgain} className="mt-8 w-full rounded-2xl bg-[color:var(--t-1a202c)] py-4 font-bold text-white transition active:scale-[0.98]">
           Order something else
         </button>
       </main>
@@ -961,7 +961,7 @@ function Confirmation({
 
 function BackIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-7 w-7 text-[#2d3748]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" className="h-7 w-7 text-[color:var(--t-2d3748)]" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 12H5M11 5l-7 7 7 7" />
     </svg>
   );

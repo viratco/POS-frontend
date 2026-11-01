@@ -24,7 +24,7 @@ export function tableChoices(tables: { id: string; name: string }[]) {
 
 export function AnalyticsSkeleton() {
   return (
-    <div className="min-h-screen bg-[#f7f4ef]">
+    <div className="min-h-screen bg-[color:var(--t-f7f4ef)]">
       <StaffNav />
       <main className="mx-auto max-w-7xl animate-pulse px-4 pt-8 pb-20 sm:px-6" aria-busy="true" aria-label="Loading analytics">
         <div className="h-4 w-28 rounded bg-stone-200" />
@@ -64,7 +64,7 @@ export default function AnalyticsDashboard({
   const base = demo ? "/dev/analytics-preview" : "/admin/analytics";
 
   return (
-    <div className="min-h-screen bg-[#f7f4ef]">
+    <div className="min-h-screen bg-[color:var(--t-f7f4ef)]">
       <StaffNav />
       <main className="mx-auto max-w-7xl px-4 pt-8 pb-20 sm:px-6">
         {demo && (
@@ -152,7 +152,7 @@ export default function AnalyticsDashboard({
             <section className="mt-12">
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="font-display text-2xl font-semibold text-stone-900">Service & ordering insights</h2>
-                <span className="rounded-full bg-[#1f5139] px-3 py-1 text-[11px] font-bold tracking-wider text-[#e6efe8] uppercase">Not in Rista</span>
+                <span className="rounded-full bg-[color:var(--t-1f5139)] px-3 py-1 text-[11px] font-bold tracking-wider text-[color:var(--t-e6efe8)] uppercase">Not in Rista</span>
               </div>
               <p className="mt-1 text-sm text-stone-500">Built from the QR ordering flow: every step from a guest&apos;s tap to the bill is timed.</p>
 
@@ -311,10 +311,10 @@ function Highlights({ a }: { a: Analytics }) {
   if (a.lostQr.value > 0) items.push({ k: "Missed", v: `${formatINR(a.lostQr.value)} in unaccepted QR orders` });
   if (items.length === 0) return null;
   return (
-    <section className="mt-6 grid gap-px overflow-hidden rounded-2xl bg-[#2a2119] text-[#f3e7d5] sm:grid-cols-2 lg:grid-cols-4">
+    <section className="mt-6 grid gap-px overflow-hidden rounded-2xl bg-[color:var(--t-2a2119)] text-[color:var(--t-f3e7d5)] sm:grid-cols-2 lg:grid-cols-4">
       {items.slice(0, 4).map((i) => (
-        <div key={i.k} className="bg-[#2a2119] px-5 py-4">
-          <div className="text-[11px] font-semibold tracking-[0.16em] text-[#d9b26f] uppercase">{i.k}</div>
+        <div key={i.k} className="bg-[color:var(--t-2a2119)] px-5 py-4">
+          <div className="text-[11px] font-semibold tracking-[0.16em] text-[color:var(--t-d9b26f)] uppercase">{i.k}</div>
           <div className="mt-1 truncate text-[15px] font-medium" title={i.v}>{i.v}</div>
         </div>
       ))}
@@ -465,7 +465,7 @@ function Metric({
 
 function MiniStat({ label, value, foot }: { label: string; value: string; foot: string }) {
   return (
-    <div className="rounded-xl bg-[#f7f4ef] p-4">
+    <div className="rounded-xl bg-[color:var(--t-f7f4ef)] p-4">
       <div className="text-xs text-stone-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-stone-900">{value}</div>
       <div className="mt-1 text-xs text-stone-400">{foot}</div>

@@ -150,7 +150,7 @@ export default function MenuAdmin() {
         <h1 className="text-2xl font-semibold">Menu</h1>
         {error && <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-        <div className="sticky top-16 z-10 -mx-5 mt-4 bg-[#fafaf9]/95 px-5 py-2 backdrop-blur">
+        <div className="sticky top-16 z-10 -mx-5 mt-4 bg-[color:var(--t-fafaf9)]/95 px-5 py-2 backdrop-blur">
           <div className="flex items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 focus-within:border-stone-900 focus-within:ring-1 focus-within:ring-stone-900">
             <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-stone-400" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
               <circle cx="11" cy="11" r="7" />

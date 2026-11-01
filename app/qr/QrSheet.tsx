@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
 import { type Cafe, useCafe } from "@/lib/cafe";
+import { themeOf } from "@/lib/themes";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Table } from "@/lib/types";
 
@@ -12,8 +13,6 @@ type Layout = "a4" | "single";
 // Table tent card, A6 portrait (105 × 148 mm), based on the café's existing printed card.
 const CARD_W = 105;
 const CARD_H = 148;
-const GREEN = "#1d4a2b";
-const LEAF = "#c9e8a8";
 
 export default function QrSheet() {
   const [tables, setTables] = useState<Table[]>([]);
@@ -145,13 +144,14 @@ export default function QrSheet() {
 }
 
 function Card({ table, qr, cafe }: { table: Table; qr?: string; cafe: Cafe | null }) {
+  const colors = themeOf(cafe?.theme).qr;
   return (
     <div
       className="qr-card relative overflow-hidden text-white"
       style={{
         width: `${CARD_W}mm`,
         height: `${CARD_H}mm`,
-        background: `radial-gradient(120% 70% at 50% 0%, #2a5f3a 0%, ${GREEN} 55%, #163a21 100%)`,
+        background: `radial-gradient(120% 70% at 50% 0%, ${colors.from} 0%, ${colors.mid} 55%, ${colors.to} 100%)`,
       }}
     >
       {/* Logo + tagline */}
@@ -205,7 +205,7 @@ function Card({ table, qr, cafe }: { table: Table; qr?: string; cafe: Cafe | nul
       {/* Call to action */}
       <div
         className="absolute inset-x-0 text-center font-bold uppercase"
-        style={{ top: "117mm", color: LEAF, fontSize: "9.5pt", lineHeight: 1.45, letterSpacing: "0.02em" }}
+        style={{ top: "117mm", color: colors.soft, fontSize: "9.5pt", lineHeight: 1.45, letterSpacing: "0.02em" }}
       >
         Order right from your table
         <br />
