@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import SoundToggle from "@/components/SoundToggle";
 import { chime } from "@/lib/chime";
 import { useOnline } from "@/lib/offline/net";
@@ -24,6 +24,9 @@ export default function KitchenScreen() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(0); // set on mount; 0 avoids a prerender-time clock
   const online = useOnline();
+  // The dish waiting for "Yes, ready". Nothing is marked until that second tap.
+  const [confirming, setConfirming] = useState<string | null>(null);
+  const askedAt = useRef(0);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -49,6 +52,25 @@ export default function KitchenScreen() {
   }, [load]);
 
   const live = useOrderFeed(load, () => chime());
+
+  // Changes its mind or walks away: the question goes away by itself.
+  useEffect(() => {
+    if (!confirming) return;
+    const t = setTimeout(() => setConfirming(null), 6000);
+    return () => clearTimeout(t);
+  }, [confirming]);
+
+  function ask(id: string, at: number) {
+    askedAt.current = at;
+    setConfirming(id);
+  }
+
+  function confirm(id: string, at: number) {
+    // "Yes" appears where the finger already is: ignore a double-tap on Mark ready.
+    if (at - askedAt.current < 500) return;
+    setConfirming(null);
+    void markReady(id);
+  }
 
   async function markReady(id: string) {
     setTickets((ts) => ts.filter((t) => t.id !== id)); // optimistic
@@ -90,10 +112,7 @@ export default function KitchenScreen() {
             const late = mins >= 15;
             return (
               <li key={t.id}>
-                <button
-                  onClick={() => markReady(t.id)}
-                  className={`w-full rounded-2xl border-4 p-5 text-left active:scale-[0.98] ${late ? "border-red-500 bg-red-950" : "border-neutral-700 bg-neutral-900"}`}
-                >
+                <div className={`rounded-2xl border-4 p-5 ${confirming === t.id ? "border-emerald-500 bg-emerald-950" : late ? "border-red-500 bg-red-950" : "border-neutral-700 bg-neutral-900"}`}>
                   <div className="flex items-baseline justify-between">
                     <span className="text-2xl font-bold text-amber-400">{t.orders?.tables?.name ?? "?"}</span>
                     <span className={`text-2xl font-semibold tabular-nums ${late ? "text-red-400" : "text-neutral-300"}`}>
@@ -107,8 +126,25 @@ export default function KitchenScreen() {
                     <div className="mt-1 text-2xl font-semibold text-sky-300">{t.options.map((o) => o.name).join(" · ")}</div>
                   )}
                   {t.note && <div className="mt-3 rounded-lg bg-yellow-300 px-3 py-2 text-2xl font-bold text-black">⚠ {t.note}</div>}
-                  <div className="mt-4 text-lg text-neutral-400">Tap when ready</div>
-                </button>
+
+                  {confirming === t.id ? (
+                    <div className="mt-4">
+                      <p className="text-xl font-bold text-emerald-300">Is this dish ready?</p>
+                      <div className="mt-2 flex gap-3">
+                        <button onClick={() => setConfirming(null)} className="h-16 flex-1 rounded-xl bg-neutral-700 text-2xl font-bold text-white active:scale-[0.98]">
+                          No
+                        </button>
+                        <button onClick={(e) => confirm(t.id, e.timeStamp)} className="h-16 flex-[2] rounded-xl bg-emerald-500 text-2xl font-bold text-black active:scale-[0.98]">
+                          ✓ Yes, ready
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={(e) => ask(t.id, e.timeStamp)} className="mt-4 h-16 w-full rounded-xl bg-neutral-800 text-2xl font-bold text-white ring-2 ring-neutral-600 active:scale-[0.98]">
+                      Mark ready
+                    </button>
+                  )}
+                </div>
               </li>
             );
           })}
