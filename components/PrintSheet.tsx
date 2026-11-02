@@ -42,7 +42,7 @@ function toLoaded(job: PrintJob, cafe: Cafe | null): Loaded {
       tables: { name: r.tableName },
     },
     items: r.items,
-    payments: r.total > 0 ? [{ method: r.method, amount_paise: r.total, received_at: r.closedAt }] : [],
+    payments: r.total === 0 ? [] : (r.splits?.length ? r.splits : [{ method: r.method, amount: r.total }]).map((p) => ({ method: p.method, amount_paise: p.amount, received_at: r.closedAt })),
   };
 }
 

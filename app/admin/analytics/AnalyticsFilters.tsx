@@ -93,6 +93,8 @@ export default function AnalyticsFilters({
           <option value="">All payments</option>
           <option value="upi">UPI only</option>
           <option value="cash">Cash only</option>
+          <option value="card">Card only</option>
+          <option value="hybrid">Hybrid (split)</option>
         </select>
         <select aria-label="Table" value={filters.table ?? ""} onChange={(e) => go(range, { ...filters, table: e.target.value || null })} className={select(!!filters.table)}>
           <option value="">All tables</option>

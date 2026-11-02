@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import StaffNav from "@/components/StaffNav";
 import { formatINR } from "@/lib/money";
 import { optionsLabel } from "@/lib/options";
+import { payLabel, type PayMethod } from "@/lib/payments";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { OrderStatus, PickedOption } from "@/lib/types";
 
@@ -40,7 +41,7 @@ type Bill = {
   discount_paise: number | null;
   tables: { name: string } | null;
   order_items: { id: string; name_snapshot: string; qty: number; price_paise_snapshot: number; status: string; options: PickedOption[] | null }[];
-  payments: { method: "upi" | "cash" }[];
+  payments: { method: PayMethod }[];
 };
 
 type Sort = "recent" | "visits" | "spent";
@@ -342,7 +343,7 @@ function BillsDrawer({ customer, onClose }: { customer: Customer; onClose: () =>
                     <div className="text-xs text-stone-500 tabular-nums">
                       {b.tables?.name ?? "—"}
                       {b.invoice_no ? ` · ${b.invoice_no}` : ""}
-                      {b.payments.length ? ` · ${b.payments.map((p) => (p.method === "upi" ? "UPI" : "Cash")).join(" + ")}` : ""}
+                      {b.payments.length ? ` · ${b.payments.map((p) => payLabel(p.method)).join(" + ")}` : ""}
                     </div>
                   </div>
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${s.chip}`}>{s.label}</span>

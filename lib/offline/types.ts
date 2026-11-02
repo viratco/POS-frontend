@@ -1,3 +1,4 @@
+import type { PayMethod, PaySplit } from "@/lib/payments";
 import type { Discount } from "@/lib/money";
 import type { Category, Guest, MenuItem, Order, OrderItem, PickedOption, Table } from "@/lib/types";
 
@@ -39,7 +40,8 @@ export type Receipt = {
   tableName: string;
   invoiceNo: string | null;
   closedAt: string;
-  method: "upi" | "cash";
+  method: PayMethod;
+  splits?: PaySplit[]; // hybrid only
   items: OrderItem[];
   subtotal: number;
   discount: number;
@@ -67,7 +69,8 @@ export type Action = Base &
     | {
         kind: "close";
         orderId: string;
-        method: "upi" | "cash";
+        method: PayMethod;
+        splits?: PaySplit[];
         itemIds: string[];
         discount: Discount;
         deviceId: string | null;

@@ -5,6 +5,7 @@ import { formatINR } from "@/lib/money";
 import { isNetworkError, reportNetworkFailure } from "./net";
 import { dequeue, readDevice, readIdMap, readProblems, readQueue, saveDevice, saveIdMap, saveProblems } from "./store";
 import type { Action, DeviceInfo } from "./types";
+import { paidBy } from "@/lib/payments";
 
 // Sends the changes made while offline, oldest first, using the same database functions as
 // when online. Each one is safe to send twice, so a connection that drops mid-way just
@@ -75,7 +76,7 @@ export function describe(a: Action): string {
     case "cancel":
       return `${a.tableName}: order cancelled`;
     case "close":
-      return `${a.tableName}: ${formatINR(a.receipt.total)} paid by ${a.method === "upi" ? "UPI" : "cash"}${a.receipt.invoiceNo ? ` (${a.receipt.invoiceNo})` : ""}`;
+      return `${a.tableName}: ${formatINR(a.receipt.total)} paid by ${paidBy(a.method, a.splits)}${a.receipt.invoiceNo ? ` (${a.receipt.invoiceNo})` : ""}`;
   }
 }
 
@@ -167,6 +168,7 @@ export async function execute(a: Action, supabase: SupabaseClient, idMap: Record
             p_discount_type: a.discount?.type ?? null,
             p_discount_value: a.discount?.value ?? 0,
             p_discount_reason: a.discount?.reason || null,
+            ...(a.splits?.length ? { p_splits: a.splits } : {}),
           })
           .abortSignal(signal());
         return outcomeOf(error, status, data);

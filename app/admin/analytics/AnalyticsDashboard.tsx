@@ -8,6 +8,7 @@ import AnalyticsFilters from "./AnalyticsFilters";
 import { Columns, Heatmap, MenuMatrix } from "./charts";
 import { BarList, C, Empty, inrCompact, minutes, QUADRANTS, SplitBar } from "./parts";
 import RefreshButton from "./RefreshButton";
+import { payLabel } from "@/lib/payments";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const hour12 = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "am" : "pm"}`;
@@ -128,9 +129,9 @@ export default function AnalyticsDashboard({
                 <Card title="How guests paid">
                   <SplitBar
                     parts={a.payments.map((p) => ({
-                      label: p.method === "upi" ? "UPI" : "Cash",
+                      label: payLabel(p.method),
                       value: p.amount,
-                      color: p.method === "upi" ? C.series : C.second,
+                      color: { upi: C.series, cash: C.second, card: C.third }[p.method],
                       detail: `${inrCompact(p.amount)} · ${p.bills} bills`,
                     }))}
                   />

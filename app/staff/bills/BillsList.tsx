@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
 import { formatINR } from "@/lib/money";
+import { paidBy, payLabel, type PayMethod } from "@/lib/payments";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 type BillRow = {
@@ -14,7 +15,7 @@ type BillRow = {
   discount_reason?: string | null;
   offline_note?: string | null; // what the server adjusted when an offline bill was sent
   tables: { name: string } | null;
-  payments: { method: "upi" | "cash"; amount_paise: number }[];
+  payments: { method: PayMethod; amount_paise: number }[];
 };
 
 function todayISO() {
@@ -64,7 +65,7 @@ export default function BillsList() {
 
   const q = query.trim().toLowerCase();
   const shown = rows.filter((r) => !q || (r.invoice_no ?? "").toLowerCase().includes(q) || (r.tables?.name ?? "").toLowerCase().includes(q));
-  const sum = (m?: "upi" | "cash") =>
+  const sum = (m?: PayMethod) =>
     rows.reduce((s, r) => s + r.payments.filter((p) => !m || p.method === m).reduce((a, p) => a + p.amount_paise, 0), 0);
 
   return (
@@ -93,11 +94,12 @@ export default function BillsList() {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
           <Stat label="Bills" value={String(rows.length)} />
           <Stat label="Total" value={formatINR(sum())} />
           <Stat label="UPI" value={formatINR(sum("upi"))} />
           <Stat label="Cash" value={formatINR(sum("cash"))} />
+          <Stat label="Card" value={formatINR(sum("card"))} />
         </div>
 
         {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{error}</p>}
@@ -123,7 +125,11 @@ export default function BillsList() {
                     <div className="text-sm text-stone-500">
                       {r.tables?.name ?? "—"} ·{" "}
                       {new Date(r.closed_at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })} ·{" "}
-                      {r.payments.map((p) => (p.method === "upi" ? "UPI" : "Cash")).join(" + ") || "Complimentary"}
+                      {r.payments.length > 1
+                        ? paidBy(r.payments[0].method, r.payments.map((p) => ({ method: p.method, amount: p.amount_paise })))
+                        : r.payments[0]
+                          ? payLabel(r.payments[0].method)
+                          : "Complimentary"}
                       {(r.discount_paise ?? 0) > 0 && (
                         <span className="ml-1 font-semibold text-emerald-700">
                           · {formatINR(r.discount_paise!)} off{r.discount_reason ? ` (${r.discount_reason})` : ""}

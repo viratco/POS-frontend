@@ -2,6 +2,7 @@
 // All money is integer paise. All clock maths is IST (UTC+5:30, no DST).
 
 import type { Diet } from "./types";
+import { PAY_METHODS, type PayMethod } from "@/lib/payments";
 
 export type RangeKey = "today" | "yesterday" | "7d" | "thisMonth" | "lastMonth" | "30d" | "90d" | "custom";
 /** from / to are IST calendar dates (YYYY-MM-DD), used only by "custom". */
@@ -28,7 +29,7 @@ export function parseRange(v: string | string[] | undefined, from?: string | str
 /* ─────────────────────────── filters ─────────────────────────── */
 
 export type TimeOfDay = "morning" | "afternoon" | "evening";
-export type Filters = { pay: "upi" | "cash" | null; table: string | null; time: TimeOfDay | null };
+export type Filters = { pay: PayMethod | "hybrid" | null; table: string | null; time: TimeOfDay | null };
 
 export const TIMES_OF_DAY: { key: TimeOfDay; label: string; from: number; to: number }[] = [
   { key: "morning", label: "Morning (before 12 pm)", from: 0, to: 12 },
@@ -38,7 +39,7 @@ export const TIMES_OF_DAY: { key: TimeOfDay; label: string; from: number; to: nu
 
 export function parseFilters(q: { pay?: string | string[]; table?: string | string[]; time?: string | string[] }): Filters {
   return {
-    pay: q.pay === "upi" || q.pay === "cash" ? q.pay : null,
+    pay: q.pay === "upi" || q.pay === "cash" || q.pay === "card" || q.pay === "hybrid" ? q.pay : null,
     table: typeof q.table === "string" && q.table ? q.table : null,
     time: TIMES_OF_DAY.some((t) => t.key === q.time) ? (q.time as TimeOfDay) : null,
   };
@@ -49,10 +50,15 @@ export const hasFilters = (f: Filters) => !!(f.pay || f.table || f.time);
 /** Keeps only the orders matching the filters; dishes and payments follow their orders. */
 export function filterInput(input: AnalyticsInput, f: Filters): AnalyticsInput {
   if (!hasFilters(f)) return input;
-  const paidBy = f.pay ? new Set(input.payments.filter((p) => p.method === f.pay).map((p) => p.order_id)) : null;
+  // "UPI only" means the whole bill went on UPI; a bill split across methods counts as Hybrid.
+  const parts = new Map<string, PayMethod[]>();
+  for (const p of input.payments) parts.set(p.order_id, [...(parts.get(p.order_id) ?? []), p.method]);
   const slot = TIMES_OF_DAY.find((t) => t.key === f.time);
   const orders = input.orders.filter((o) => {
-    if (paidBy && !paidBy.has(o.id)) return false;
+    if (f.pay) {
+      const paid = parts.get(o.id) ?? [];
+      if (f.pay === "hybrid" ? paid.length < 2 : paid.length !== 1 || paid[0] !== f.pay) return false;
+    }
     if (f.table && o.table_id !== f.table) return false;
     if (slot) {
       const h = istParts(o.created_at).hour;
@@ -93,7 +99,7 @@ export type AItem = {
   accepted_at: string | null;
   ready_at: string | null;
 };
-export type APayment = { order_id: string; method: "upi" | "cash"; amount_paise: number };
+export type APayment = { order_id: string; method: PayMethod; amount_paise: number };
 export type AMenuItem = {
   id: string;
   category_id: string;
@@ -210,7 +216,7 @@ export type Analytics = {
   daily: { day: number; label: string; net: number; bills: number }[];
   hourly: { hour: number; net: number; bills: number }[]; // paid bills by IST start hour
   heatmap: { counts: number[][]; max: number }; // [dow][hour], paid bills by order start time
-  payments: { method: "upi" | "cash"; amount: number; bills: number }[];
+  payments: { method: PayMethod; amount: number; bills: number }[];
   categories: { name: string; net: number; qty: number }[];
   topItems: { name: string; qty: number; net: number }[];
 
@@ -301,7 +307,7 @@ export function computeAnalytics(input: AnalyticsInput, range: Range, now: numbe
   }
 
   /* payment mix */
-  const payMap = new Map<"upi" | "cash", { amount: number; bills: number }>();
+  const payMap = new Map<PayMethod, { amount: number; bills: number }>();
   for (const p of input.payments) {
     if (!paidIds.has(p.order_id)) continue;
     const e = payMap.get(p.method) ?? { amount: 0, bills: 0 };
@@ -309,7 +315,7 @@ export function computeAnalytics(input: AnalyticsInput, range: Range, now: numbe
     e.bills += 1;
     payMap.set(p.method, e);
   }
-  const payments = (["upi", "cash"] as const).map((m) => ({ method: m, ...(payMap.get(m) ?? { amount: 0, bills: 0 }) }));
+  const payments = PAY_METHODS.map((m) => ({ method: m, ...(payMap.get(m) ?? { amount: 0, bills: 0 }) }));
 
   /* per item / category */
   const byItem = new Map<string, { name: string; qty: number; net: number; menuId: string | null }>();

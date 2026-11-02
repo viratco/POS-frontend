@@ -12,6 +12,7 @@ import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } fr
 import { type Cafe, loadCafe } from "@/lib/cafe";
 import { autoPlan, readPlan, SOHEES_PLAN, spotNumber } from "@/lib/floorPlan";
 import { applyDiscount, billFor, type Discount, formatINR, gstRate } from "@/lib/money";
+import { mainMethod, PAY_METHODS, paidBy, payLabel, type PayMethod, type PaySplit } from "@/lib/payments";
 import { applyActions, localDay } from "@/lib/offline/apply";
 import { checkConnection, isNetworkError, reportNetworkFailure, useOnline } from "@/lib/offline/net";
 import { enqueue, readIdMap, readMenu, readProblems, readQueue, readSnapshot, saveMenu, saveProblems, saveSnapshot } from "@/lib/offline/store";
@@ -51,6 +52,9 @@ function friendlyError(msg: string) {
   if (msg.includes("order_closed")) return "This bill is already closed and can't be changed. Refresh the page.";
   if (msg.includes("invalid_status_change")) return "That item can't be moved back. Refresh the page.";
   if (msg.includes("use_close_order")) return "Use Take payment to close a bill.";
+  if (msg.includes("split_mismatch")) return "The bill total changed. Please check the amounts and try again.";
+  if (msg.includes("invalid_split")) return "Those payment amounts aren't valid. Please check them.";
+  if (msg.includes("invalid input value for enum") || msg.includes("p_splits")) return "Card and Hybrid need a one-time database update first.";
   if (msg.includes("permission denied")) return "You don't have permission to do that.";
   return msg;
 }
@@ -481,7 +485,7 @@ export default function Dashboard() {
 
   // Take payment. Online: the server closes the bill and numbers it. Offline: this device numbers
   // it from its own series (so the printed invoice is final) and the bill is sent later.
-  async function pay(table: Table, order: Order, orderItems: OrderItem[], method: "upi" | "cash", discount: Discount) {
+  async function pay(table: Table, order: Order, orderItems: OrderItem[], method: PayMethod, discount: Discount, splits?: PaySplit[]) {
     if (online && queue.length === 0) {
       // Discount params only when there is one, so plain payments work with older databases too.
       const { data, error, status } = await supabase
@@ -490,6 +494,7 @@ export default function Dashboard() {
           p_method: method,
           p_gst_rate_bps: gstRate(),
           ...(discount ? { p_discount_type: discount.type, p_discount_value: discount.value, p_discount_reason: discount.reason || null } : {}),
+          ...(splits ? { p_splits: splits } : {}),
         })
         .abortSignal(AbortSignal.timeout(15_000));
       const out = outcomeOf(error, status, data);
@@ -497,6 +502,7 @@ export default function Dashboard() {
         void load();
         return { order: data as Order, receipt: null };
       }
+      if (error?.code === "PGRST202" && splits) return { error: friendlyError("p_splits") };
       if (!out.retry) return { error: error?.message === "invalid_discount" ? "That discount isn't valid." : friendlyError(error?.message ?? out.message) };
       reportNetworkFailure();
     }
@@ -512,6 +518,7 @@ export default function Dashboard() {
       invoiceNo,
       closedAt: at.toISOString(),
       method,
+      splits,
       items: billed,
       subtotal: fin.subtotal,
       discount: fin.discount,
@@ -527,6 +534,7 @@ export default function Dashboard() {
       tableName: table.name,
       orderId: order.id,
       method,
+      splits,
       itemIds: billed.map((i) => i.id),
       discount,
       deviceId,
@@ -847,7 +855,7 @@ export default function Dashboard() {
           stamp={stamp}
           onPrint={setPrintJob}
           onAdd={(lines) => addItems(selected.table, selected.order, lines)}
-          onPay={(method, discount) => pay(selected.table, selected.order!, selected.items, method, discount)}
+          onPay={(method, discount, splits) => pay(selected.table, selected.order!, selected.items, method, discount, splits)}
           loadMenu={(show) => loadMenu(supabase, cafeId, online, show)}
         />
       )}
@@ -1114,7 +1122,7 @@ function TableDrawer({
   stamp: () => Stamp;
   onPrint: (job: PrintJob) => void;
   onAdd: (lines: AddLine[]) => Promise<{ error: string | null; queued: boolean }>;
-  onPay: (method: "upi" | "cash", discount: Discount) => Promise<{ error: string } | { order: Order | null; receipt: Receipt | null }>;
+  onPay: (method: PayMethod, discount: Discount, splits?: PaySplit[]) => Promise<{ error: string } | { order: Order | null; receipt: Receipt | null }>;
   loadMenu: (show: (m: Menu | null) => void) => Promise<void>;
 }) {
   const [adding, setAdding] = useState(false);
@@ -1426,10 +1434,10 @@ function TableDrawer({
           waitingCount={waiting.length}
           busy={busy}
           onClose={() => setPaying(null)}
-          onPay={async (method, discount) => {
+          onPay={async (method, discount, splits) => {
             setBusy(true);
             setError(null);
-            const res = await onPay(method, discount);
+            const res = await onPay(method, discount, splits);
             setBusy(false);
             if ("error" in res) {
               setError(res.error);
@@ -1437,7 +1445,7 @@ function TableDrawer({
             }
             setPaidReceipt(res.receipt);
             const total = res.receipt?.total ?? res.order?.total_paise ?? 0;
-            const how = method === "upi" ? "UPI" : "cash";
+            const how = paidBy(method, splits);
             toast(
               total === 0
                 ? `✓ ${table.name} closed as complimentary`
@@ -1642,11 +1650,13 @@ function PaymentModal({
   waitingCount: number;
   busy: boolean;
   onClose: () => void;
-  onPay: (method: "upi" | "cash", discount: Discount) => Promise<number | null>;
+  onPay: (method: PayMethod, discount: Discount, splits?: PaySplit[]) => Promise<number | null>;
   onPrintReceipt: () => void;
   onDone: () => void;
 }) {
-  const [paid, setPaid] = useState<{ method: "upi" | "cash"; total: number } | null>(null);
+  const [paid, setPaid] = useState<{ how: string; total: number } | null>(null);
+  const [hybrid, setHybrid] = useState(false);
+  const [parts, setParts] = useState<Record<PayMethod, string>>({ upi: "", cash: "", card: "" });
   const [showDiscount, setShowDiscount] = useState(false);
   const [kind, setKind] = useState<"percent" | "amount">("percent");
   const [input, setInput] = useState("");
@@ -1658,9 +1668,23 @@ function PaymentModal({
   const discount: Discount = showDiscount && parsed && !invalid ? { type: kind, value: parsed, reason } : null;
   const final = applyDiscount(bill.subtotal, discount, bill.rateBps);
 
-  async function pay(method: "upi" | "cash") {
-    const total = await onPay(method, discount);
-    if (total !== null) setPaid({ method, total });
+  const splits: PaySplit[] = PAY_METHODS.flatMap((method) => {
+    const amount = parseValue(parts[method]);
+    return amount ? [{ method, amount }] : [];
+  });
+  const partsInvalid = PAY_METHODS.some((m) => parts[m].trim() !== "" && parseValue(parts[m]) === null);
+  const left = final.total - splits.reduce((s, p) => s + p.amount, 0);
+  const splitReady = !partsInvalid && splits.length >= 2 && left === 0;
+
+  async function pay(method: PayMethod, parts?: PaySplit[]) {
+    const total = await onPay(method, discount, parts);
+    if (total !== null) setPaid({ how: paidBy(method, parts), total });
+  }
+
+  // Fills this method with whatever is still left to pay.
+  function fillRest(m: PayMethod) {
+    const paise = (parseValue(parts[m]) ?? 0) + left;
+    setParts({ ...parts, [m]: paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100) });
   }
 
   if (paid) {
@@ -1673,7 +1697,7 @@ function PaymentModal({
             </svg>
           </div>
           <p className="mt-4 text-sm font-semibold text-stone-500">
-            {tableName} · {paid.total === 0 ? "complimentary" : `paid by ${paid.method === "upi" ? "UPI" : "cash"}`}
+            {tableName} · {paid.total === 0 ? "complimentary" : `paid by ${paid.how}`}
           </p>
           <div className="mt-1 text-4xl font-bold tracking-tight tabular-nums">{formatINR(paid.total)}</div>
           <p className="mt-1 text-sm text-stone-500">The table is free again.</p>
@@ -1816,24 +1840,91 @@ function PaymentModal({
         )}
 
         <p className="mt-5 text-sm font-semibold text-stone-700">{final.total === 0 ? "Close as complimentary:" : "How did they pay?"}</p>
-        <div className="mt-2 grid grid-cols-2 gap-3">
-          <button
-            disabled={busy || invalid}
-            onClick={() => pay("upi")}
-            className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
-          >
-            <span className="text-xl">📱</span>
-            <span className="text-lg font-bold">UPI</span>
-          </button>
-          <button
-            disabled={busy || invalid}
-            onClick={() => pay("cash")}
-            className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
-          >
-            <span className="text-xl">💵</span>
-            <span className="text-lg font-bold">Cash</span>
-          </button>
-        </div>
+        {hybrid && final.total > 0 ? (
+          <div className="mt-2 rounded-2xl bg-stone-50 p-3 ring-1 ring-stone-200">
+            <div className="space-y-2">
+              {PAY_METHODS.map((m) => (
+                <div key={m} className="flex items-center gap-2">
+                  <span className="w-12 text-sm font-bold text-stone-700">{payLabel(m)}</span>
+                  <div className="relative min-w-0 flex-1">
+                    <span className="absolute top-1/2 left-3 -translate-y-1/2 text-stone-400">₹</span>
+                    <input
+                      value={parts[m]}
+                      onChange={(e) => setParts({ ...parts, [m]: e.target.value })}
+                      inputMode="decimal"
+                      aria-label={`${payLabel(m)} amount`}
+                      placeholder="0"
+                      className="h-11 w-full rounded-xl bg-white pr-3 pl-7 text-base font-semibold tabular-nums ring-1 ring-stone-200 outline-none focus:ring-2 focus:ring-stone-900"
+                    />
+                  </div>
+                  <button
+                    disabled={left <= 0}
+                    onClick={() => fillRest(m)}
+                    className="h-11 rounded-xl bg-white px-3 text-sm font-bold text-stone-700 ring-1 ring-stone-200 hover:bg-stone-100 disabled:opacity-40"
+                  >
+                    Rest
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className={`mt-3 text-center text-sm font-bold tabular-nums ${partsInvalid || left < 0 ? "text-red-700" : left > 0 ? "text-amber-700" : "text-emerald-700"}`}>
+              {partsInvalid
+                ? "Please enter amounts as numbers."
+                : left > 0
+                  ? `${formatINR(left)} left to enter`
+                  : left < 0
+                    ? `${formatINR(-left)} too much`
+                    : splits.length < 2
+                      ? "Enter at least two methods, or go back and pick one."
+                      : "Adds up to the full bill ✓"}
+            </p>
+            <button
+              disabled={busy || invalid || !splitReady}
+              onClick={() => pay(mainMethod(splits), splits)}
+              className="mt-3 h-14 w-full rounded-xl bg-emerald-600 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+            >
+              Paid {formatINR(final.total)}
+            </button>
+            <button onClick={() => setHybrid(false)} className="mt-2 h-10 w-full rounded-xl text-sm font-semibold text-stone-500 hover:bg-stone-100">
+              Back to payment options
+            </button>
+          </div>
+        ) : (
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <button
+              disabled={busy || invalid}
+              onClick={() => pay("upi")}
+              className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-xl">📱</span>
+              <span className="text-lg font-bold">UPI</span>
+            </button>
+            <button
+              disabled={busy || invalid}
+              onClick={() => pay("cash")}
+              className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-xl">💵</span>
+              <span className="text-lg font-bold">Cash</span>
+            </button>
+            <button
+              disabled={busy || invalid}
+              onClick={() => pay("card")}
+              className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-indigo-600 text-white transition hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-xl">💳</span>
+              <span className="text-lg font-bold">Card</span>
+            </button>
+            <button
+              disabled={busy || invalid || final.total === 0}
+              onClick={() => setHybrid(true)}
+              className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-amber-500 text-stone-950 transition hover:bg-amber-400 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-xl">➗</span>
+              <span className="text-lg font-bold">Hybrid</span>
+            </button>
+          </div>
+        )}
         <p className="mt-3 text-center text-xs text-stone-400">This closes the bill and frees the table.</p>
         <button onClick={onClose} className="mt-4 h-12 w-full rounded-xl font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50">
           Not yet

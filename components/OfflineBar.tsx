@@ -49,7 +49,7 @@ export default function OfflineBar({
             </span>
           </div>
           <ul className="mt-1.5 grid gap-x-6 gap-y-0.5 text-[13px] text-amber-900/90 sm:grid-cols-2">
-            <li>• Orders, kitchen slips, bills and cash/UPI payments work as normal.</li>
+            <li>• Orders, kitchen slips, bills and cash, UPI, card and hybrid payments work as normal.</li>
             <li>• The kitchen screen is offline too: hand the printed slip to the kitchen.</li>
             <li>• QR orders from guests will show up here when you&apos;re back online.</li>
             <li>• Don&apos;t clear this browser&apos;s history/data until it says all saved.</li>

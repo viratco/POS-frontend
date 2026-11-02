@@ -7,6 +7,7 @@ import { type Cafe, loadCafe } from "@/lib/cafe";
 import { amount, billFor, gstSplit } from "@/lib/money";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { Order, OrderItem } from "@/lib/types";
+import { payLabel, type PayMethod } from "@/lib/payments";
 
 type Kind = "bill" | "receipt" | "kot";
 type Paper = "80" | "58";
@@ -14,7 +15,7 @@ export type Loaded = {
   cafe: Cafe | null;
   order: Order & { tables: { name: string } | null };
   items: OrderItem[];
-  payments: { method: "upi" | "cash"; amount_paise: number; received_at: string }[];
+  payments: { method: PayMethod; amount_paise: number; received_at: string }[];
 };
 
 export const PAPER_KEY = "sohees.paper";
@@ -205,7 +206,7 @@ export function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "
       <Hr dashed={false} />
 
       {isInvoice ? (
-        payments.map((p, idx) => <Line key={idx} left={`Paid by ${p.method === "upi" ? "UPI" : "Cash"}`} right={amount(p.amount_paise)} />)
+        payments.map((p, idx) => <Line key={idx} left={`Paid by ${payLabel(p.method)}`} right={amount(p.amount_paise)} />)
       ) : (
         <div className="text-center">Please pay at the counter</div>
       )}
