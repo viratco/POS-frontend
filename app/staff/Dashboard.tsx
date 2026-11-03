@@ -55,6 +55,9 @@ function friendlyError(msg: string) {
   if (msg.includes("split_mismatch")) return "The bill total changed. Please check the amounts and try again.";
   if (msg.includes("invalid_split")) return "Those payment amounts aren't valid. Please check them.";
   if (msg.includes("invalid input value for enum") || msg.includes("p_splits")) return "Card and Hybrid need a one-time database update first.";
+  if (msg.includes("invalid_name")) return "Please enter the guest's name.";
+  if (msg.includes("invalid_phone")) return "Please enter a valid 10-digit mobile number.";
+  if (msg.includes("staff_save_guest") || msg.includes("staff_remove_guest")) return "Adding guest details needs a one-time database update first.";
   if (msg.includes("permission denied")) return "You don't have permission to do that.";
   return msg;
 }
@@ -850,6 +853,22 @@ export default function Dashboard() {
           }}
           online={online}
           canMove={online && queue.length === 0}
+          canEditGuests={online && queue.length === 0}
+          onSaveGuest={async (guest) => {
+            const { error } = await supabase.rpc("staff_save_guest", {
+              p_order_id: selected.order!.id,
+              p_name: guest.name,
+              p_phone: guest.phone,
+              p_marketing_consent: guest.marketing_consent,
+            });
+            if (!error) void load();
+            return { error: error?.message ?? null };
+          }}
+          onRemoveGuest={async (phone) => {
+            const { error } = await supabase.rpc("staff_remove_guest", { p_order_id: selected.order!.id, p_phone: phone });
+            if (!error) void load();
+            return { error: error?.message ?? null };
+          }}
           printHere={printHere}
           act={act}
           stamp={stamp}
@@ -1094,6 +1113,9 @@ function TableDrawer({
   onMoved,
   online,
   canMove,
+  canEditGuests,
+  onSaveGuest,
+  onRemoveGuest,
   printHere,
   act,
   stamp,
@@ -1117,6 +1139,9 @@ function TableDrawer({
   onMoved: (toTableId: string) => void;
   online: boolean;
   canMove: boolean; // moving tables needs the internet
+  canEditGuests: boolean; // so does adding guest details
+  onSaveGuest: (guest: NewGuest) => Promise<{ error: string | null }>;
+  onRemoveGuest: (phone: string) => Promise<{ error: string | null }>;
   printHere: boolean; // print from this screen (offline) instead of a new tab
   act: Act;
   stamp: () => Stamp;
@@ -1188,19 +1213,14 @@ function TableDrawer({
               <span className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${STATE[state].chip}`}>{STATE[state].label}</span>
             </div>
             <p className="mt-1 text-sm text-stone-500">{order ? `Open ${now ? ago(order.created_at, now) : ""} · ${liveQty} items` : "No order yet"}</p>
-            {guests.length > 0 && (
-              <ul className="mt-2 space-y-1">
-                {guests.map((g) => (
-                  <li key={g.phone} className="flex flex-wrap items-center gap-x-2 text-sm">
-                    <span className="font-semibold text-stone-800">👤 {g.name}</span>
-                    <a href={`tel:+91${g.phone}`} className="font-medium text-emerald-700 tabular-nums hover:underline">
-                      {formatPhone(g.phone)}
-                    </a>
-                    {g.marketing_consent && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">OK to send offers</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <GuestDetails
+              guests={guests}
+              editable={!!order}
+              ready={canEditGuests}
+              online={online}
+              onSave={onSaveGuest}
+              onRemove={onRemoveGuest}
+            />
           </div>
           <button onClick={onClose} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
@@ -2217,6 +2237,156 @@ function WhatsAppToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
 // "9876543210" -> "98765 43210"
 function formatPhone(p: string) {
   return p.length === 10 ? `${p.slice(0, 5)} ${p.slice(5)}` : p;
+}
+
+type NewGuest = { name: string; phone: string; marketing_consent: boolean };
+
+// "+91 98765-43210", "098765 43210" → "9876543210" (the same cleanup the database does).
+function cleanPhone(raw: string) {
+  const d = raw.replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) return d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) return d.slice(1);
+  return d;
+}
+
+// The guests on a bill: filled in by the QR menu, or typed in here by staff for guests
+// who ordered at the counter, so they show up in Customers too.
+function GuestDetails({
+  guests,
+  editable,
+  ready,
+  online,
+  onSave,
+  onRemove,
+}: {
+  guests: Guest[];
+  editable: boolean; // there's an open order to add them to
+  ready: boolean; // online, with nothing waiting to send
+  online: boolean;
+  onSave: (guest: NewGuest) => Promise<{ error: string | null }>;
+  onRemove: (phone: string) => Promise<{ error: string | null }>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const digits = cleanPhone(phone);
+  const phoneOk = /^[6-9]\d{9}$/.test(digits);
+  const canSave = ready && !busy && name.trim().length > 0 && phoneOk;
+
+  function close() {
+    setOpen(false);
+    setName("");
+    setPhone("");
+    setConsent(false);
+    setError(null);
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSave) return;
+    setBusy(true);
+    setError(null);
+    const r = await onSave({ name: name.trim(), phone: digits, marketing_consent: consent });
+    setBusy(false);
+    if (r.error) setError(friendlyError(r.error));
+    else close();
+  }
+
+  async function remove(g: Guest) {
+    if (!confirm(`Remove ${g.name} (${formatPhone(g.phone)}) from this bill?`)) return;
+    setBusy(true);
+    setError(null);
+    const r = await onRemove(g.phone);
+    setBusy(false);
+    if (r.error) setError(friendlyError(r.error));
+  }
+
+  if (!editable && guests.length === 0) return null;
+  return (
+    <div className="mt-2">
+      {guests.length > 0 && (
+        <ul className="space-y-1">
+          {guests.map((g) => (
+            <li key={g.phone} className="flex flex-wrap items-center gap-x-2 text-sm">
+              <span className="font-semibold text-stone-800">👤 {g.name}</span>
+              <a href={`tel:+91${g.phone}`} className="font-medium text-emerald-700 tabular-nums hover:underline">
+                {formatPhone(g.phone)}
+              </a>
+              {g.marketing_consent && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">OK to send offers</span>}
+              {editable && ready && (
+                <button
+                  onClick={() => remove(g)}
+                  disabled={busy}
+                  title="Remove this guest"
+                  aria-label={`Remove ${g.name}`}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-stone-400 hover:bg-stone-100 hover:text-red-600 disabled:opacity-40"
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {editable && !open && (
+        <button
+          onClick={() => setOpen(true)}
+          disabled={!ready}
+          className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 -ml-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:text-stone-400 disabled:hover:bg-transparent"
+        >
+          <span className="text-base leading-none">+</span>
+          {guests.length > 0 ? "Add another guest" : "Add guest name & number"}
+          {!ready && <span className="font-normal">· {online ? "after changes are sent" : "needs internet"}</span>}
+        </button>
+      )}
+
+      {editable && open && (
+        <form onSubmit={save} className="mt-2 space-y-2.5 rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Guest name"
+            maxLength={60}
+            autoComplete="off"
+            className="h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-[15px] outline-none focus:border-stone-500"
+          />
+          <div className="flex h-11 items-center rounded-lg border border-stone-300 bg-white focus-within:border-stone-500">
+            <span className="pl-3 text-[15px] text-stone-500">+91</span>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="10-digit mobile number"
+              inputMode="tel"
+              autoComplete="off"
+              className="h-full min-w-0 flex-1 bg-transparent px-2 text-[15px] tabular-nums outline-none"
+            />
+          </div>
+          {phone.length > 0 && !phoneOk && digits.length >= 10 && <p className="text-xs text-red-600">That doesn&apos;t look like a 10-digit mobile number.</p>}
+          <label className="flex items-center gap-2 text-sm text-stone-700">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="h-4 w-4 accent-emerald-700" />
+            Guest is OK to receive offers on WhatsApp
+          </label>
+          {error && <p className="text-sm text-red-700">{error}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={!canSave} className="h-10 flex-1 rounded-lg bg-stone-900 text-sm font-bold text-white disabled:opacity-40">
+              {busy ? "Saving…" : "Save guest"}
+            </button>
+            <button type="button" onClick={close} className="h-10 rounded-lg px-4 text-sm font-semibold text-stone-600 hover:bg-stone-200">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+      {!open && error && <p className="mt-1 text-sm text-red-700">{error}</p>}
+    </div>
+  );
 }
 
 function GuestLine({ guests, className = "" }: { guests: Guest[]; className?: string }) {
