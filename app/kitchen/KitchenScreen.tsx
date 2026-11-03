@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MezanaEmblem } from "@/components/Mezana";
 import SoundToggle from "@/components/SoundToggle";
 import { chime } from "@/lib/chime";
 import { useOnline } from "@/lib/offline/net";
@@ -84,8 +85,11 @@ export default function KitchenScreen() {
   return (
     <main className="min-h-screen bg-black p-4 text-white">
       <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-3xl font-bold">
-          Kitchen · <span className="text-amber-400">{tickets.length}</span> pending
+        <h1 className="flex items-center gap-3 text-3xl font-bold">
+          <MezanaEmblem className="h-10 w-auto" />
+          <span>
+            Kitchen · <span className="text-amber-400">{tickets.length}</span> pending
+          </span>
         </h1>
         <div className="flex items-center gap-4">
           <span className={`text-lg ${live ? "text-emerald-400" : "text-red-500"}`}>{live ? "● Live" : "● Reconnecting…"}</span>

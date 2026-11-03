@@ -2,7 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
-import { PRODUCT_NAME } from "@/lib/business";
+import { MezanaEmblem, MezanaWordmark } from "@/components/Mezana";
+import { PRODUCT_TAGLINE } from "@/lib/business";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
 // Only follow ?next= to a page on this site. Blocks tricks like "/\\evil.com" or "//evil.com",
@@ -56,12 +57,20 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f6f4f1] p-5">
+    <main className="flex min-h-screen items-center justify-center bg-[#f8f3ea] bg-[radial-gradient(60%_45%_at_50%_0%,#f3e4c6,transparent_70%)] p-5">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2a1a10] font-poster text-3xl text-[#ecd5b1] italic shadow-lg">{PRODUCT_NAME[0]}</div>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">{PRODUCT_NAME}</h1>
-          <p className="text-sm text-stone-500">Sign in to your café</p>
+          <MezanaEmblem className="h-24 w-auto drop-shadow-[0_10px_24px_rgba(94,20,32,0.25)]" />
+          <h1 className="mt-5">
+            <MezanaWordmark className="h-6 w-auto text-[#5e1420]" />
+          </h1>
+          <div className="mt-3 flex items-center gap-2" aria-hidden>
+            <span className="h-px w-10 bg-[#be9445]" />
+            <span className="h-1.5 w-1.5 rotate-45 bg-[#be9445]" />
+            <span className="h-px w-10 bg-[#be9445]" />
+          </div>
+          <p className="mt-2 font-poster text-lg text-[#9a7432] italic">{PRODUCT_TAGLINE}</p>
+          <p className="mt-4 text-sm text-stone-500">Sign in to your café</p>
         </div>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-3 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
@@ -99,7 +108,7 @@ function LoginForm() {
           {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <button
             disabled={busy}
-            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-stone-900 font-bold text-white transition hover:bg-stone-800 disabled:opacity-60"
+            className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#5e1420] font-bold text-white transition hover:bg-[#4a0f19] disabled:opacity-60"
           >
             {busy && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
             {busy ? "Signing in…" : "Sign in"}

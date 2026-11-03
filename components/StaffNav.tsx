@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { forgetSavedCafe, initial, useCafe } from "@/lib/cafe";
 import { forgetCafeData, readQueue } from "@/lib/offline/store";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { MezanaEmblem, MezanaWordmark } from "./Mezana";
 import ReadyPopup from "./ReadyPopup";
 
 const links = [
@@ -41,11 +42,17 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
     <>
     <header className="no-print sticky top-0 z-30 border-b border-[color:var(--t-ece3d6)] bg-[color:var(--t-fdfbf7)]/95 backdrop-blur-md">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+        {/* Mezana brand, then the caf\u00e9 this device is signed in to. */}
+        <Link href="/staff" title="Mezana" className="flex shrink-0 items-center gap-2">
+          <MezanaEmblem className="h-10 w-auto" />
+          <MezanaWordmark className="hidden h-[15px] w-auto text-[#5e1420] lg:block" />
+        </Link>
+        <div className="h-8 w-px shrink-0 bg-[color:var(--t-ded3c2)]" />
         <div className="flex shrink-0 items-center gap-2.5 pr-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:var(--t-2a1a10)] font-poster text-lg text-[color:var(--t-ecd5b1)] italic shadow-sm">{initial(cafe?.name)}</div>
           <div className="hidden leading-tight sm:block">
             <div className="max-w-[12rem] truncate text-[15px] font-bold tracking-tight text-[color:var(--t-2a2119)]">{cafe?.name ?? "\u00a0"}</div>
-            <div className="text-[11px] font-semibold tracking-wider text-[color:var(--t-8a7b6b)] uppercase">Staff POS</div>
+            <div className="text-[11px] font-semibold tracking-wider text-[color:var(--t-8a7b6b)] uppercase">Mezana POS</div>
           </div>
         </div>
 

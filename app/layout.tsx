@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 // import Script from "next/script"; // themes: on hold
-import { PRODUCT_NAME } from "@/lib/business";
+import { PRODUCT_NAME, PRODUCT_TAGLINE } from "@/lib/business";
 import "./globals.css";
 import "./themes.css";
 
@@ -11,8 +11,8 @@ const instrument = Instrument_Serif({ variable: "--font-instrument", subsets: ["
 const fraunces = Fraunces({ variable: "--font-fraunces", subsets: ["latin"], axes: ["SOFT", "opsz"] });
 
 export const metadata: Metadata = {
-  title: PRODUCT_NAME,
-  description: "Order from your table",
+  title: { default: PRODUCT_NAME, template: `%s · ${PRODUCT_NAME}` },
+  description: PRODUCT_TAGLINE,
 };
 
 export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#fbf7f0" };

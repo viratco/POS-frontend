@@ -21,8 +21,8 @@ self.addEventListener("activate", (event) => {
 const isFile = (url) =>
   url.pathname.startsWith("/_next/static/") ||
   /^\/(tables|brand)\//.test(url.pathname) ||
-  /^\/counter[-.]/.test(url.pathname) ||
-  url.pathname === "/favicon.ico";
+  /^\/(counter|mezana)[-.]/.test(url.pathname) ||
+  /^\/(icon|apple-icon)[.?]/.test(url.pathname + url.search);
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;

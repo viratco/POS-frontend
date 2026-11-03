@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { PRODUCT_NAME } from "@/lib/business";
+import { MezanaEmblem, MezanaWordmark } from "@/components/Mezana";
+import { PRODUCT_TAGLINE } from "@/lib/business";
 
 const links = [
   { href: "/staff", label: "Staff dashboard", hint: "Tables, orders, take payment" },
@@ -11,8 +12,15 @@ const links = [
 export default function Home() {
   return (
     <main className="mx-auto w-full max-w-xl p-6">
-      <h1 className="text-2xl font-semibold">{PRODUCT_NAME}</h1>
-      <p className="mt-1 text-stone-500">Dine-in ordering</p>
+      <div className="flex items-center gap-4">
+        <MezanaEmblem className="h-14 w-auto" />
+        <div>
+          <h1>
+            <MezanaWordmark className="h-5 w-auto text-[#5e1420]" />
+          </h1>
+          <p className="mt-1.5 font-poster text-[#9a7432] italic">{PRODUCT_TAGLINE}</p>
+        </div>
+      </div>
       <ul className="mt-6 space-y-3">
         {links.map((l) => (
           <li key={l.href}>
