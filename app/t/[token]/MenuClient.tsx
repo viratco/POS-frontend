@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { MezanaEmblem, MezanaWordmark } from "@/components/Mezana";
 import { DietMark } from "@/components/MenuMarks";
 import { formatINR } from "@/lib/money";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
@@ -283,6 +284,7 @@ export default function MenuClient({
             {next && <NextCard label={next.label} image={next.image} onClick={next.go} />}
           </>
         )}
+        <PoweredBy />
       </main>
 
       {picking && current && (
@@ -952,8 +954,31 @@ function Confirmation({
         <button onClick={onAgain} className="mt-8 w-full rounded-2xl bg-[color:var(--t-1a202c)] py-4 font-bold text-white transition active:scale-[0.98]">
           Order something else
         </button>
+        <PoweredBy />
       </main>
     </div>
+  );
+}
+
+// A quiet sign-off at the end of the menu; links to the Mezana website.
+function PoweredBy() {
+  return (
+    <a
+      href="https://www.mezana.in"
+      target="_blank"
+      rel="noopener"
+      className={`mx-auto mt-14 flex w-fit flex-col items-center gap-2 px-4 py-2 ${GREY}`}
+    >
+      <span className="flex items-center gap-2.5">
+        <span className="h-px w-8 bg-[color:var(--t-e2e8f0)]" />
+        <MezanaEmblem className="h-9 w-auto" />
+        <span className="h-px w-8 bg-[color:var(--t-e2e8f0)]" />
+      </span>
+      <span className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.18em] uppercase">
+        Powered by
+        <MezanaWordmark className="h-[9px] w-auto text-[#5e1420]" />
+      </span>
+    </a>
   );
 }
 
