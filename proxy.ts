@@ -31,6 +31,28 @@ export async function proxy(request: NextRequest) {
   const userId = data?.claims?.sub;
   const path = request.nextUrl.pathname;
 
+  // Role comes from a signed cookie when fresh; otherwise one lookup, then cached.
+  async function roleOf(userId: string): Promise<Role | null> {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const cached = await readRole(request.cookies.get(ROLE_COOKIE)?.value, userId, nowSec);
+    if (cached) return cached;
+    const { data: staff } = await supabase.from("staff").select("role").eq("user_id", userId).maybeSingle();
+    const role = (staff?.role as Role | undefined) ?? null;
+    const signed = role && (await signRole(userId, role, nowSec));
+    if (signed) {
+      response.cookies.set(ROLE_COOKIE, signed, { httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:", path: "/", maxAge: ROLE_TTL_SECONDS });
+    }
+    return role;
+  }
+
+  // The site's front door is the sign-in: signed-out people go to /login, signed-in ones to their screen.
+  if (path === "/") {
+    const url = request.nextUrl.clone();
+    url.search = "";
+    url.pathname = !userId ? "/login" : (await roleOf(userId)) === "kitchen" ? "/kitchen" : "/staff";
+    return NextResponse.redirect(url);
+  }
+
   const needsStaff = STAFF_PATHS.some((p) => path === p || path.startsWith(p + "/"));
   const needsKitchen = path === "/kitchen";
   if (!needsStaff && !needsKitchen) return response;
@@ -42,17 +64,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Role comes from a signed cookie when fresh; otherwise one lookup, then cached.
-  const nowSec = Math.floor(Date.now() / 1000);
-  let role = await readRole(request.cookies.get(ROLE_COOKIE)?.value, userId, nowSec);
-  if (!role) {
-    const { data: staff } = await supabase.from("staff").select("role").eq("user_id", userId).maybeSingle();
-    role = (staff?.role as Role | undefined) ?? null;
-    const signed = role && (await signRole(userId, role, nowSec));
-    if (signed) {
-      response.cookies.set(ROLE_COOKIE, signed, { httpOnly: true, sameSite: "lax", secure: request.nextUrl.protocol === "https:", path: "/", maxAge: ROLE_TTL_SECONDS });
-    }
-  }
+  const role = await roleOf(userId);
   const allowed = needsStaff ? role === "staff" : role === "staff" || role === "kitchen";
   if (!allowed) {
     const url = request.nextUrl.clone();
@@ -64,5 +76,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/staff/:path*", "/admin/:path*", "/qr/:path*", "/kitchen", "/login"],
+  matcher: ["/", "/staff/:path*", "/admin/:path*", "/qr/:path*", "/kitchen", "/login"],
 };
