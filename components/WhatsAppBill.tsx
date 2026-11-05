@@ -15,8 +15,6 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
   const [error, setError] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [sentTo, setSentTo] = useState<string[]>([]);
-  // The bill picture, ready for the phone's share menu (Android tablets and phones; not every browser).
-  const [image, setImage] = useState<File | null>(null);
   const people = guests.filter((g, i) => indianMobile(g.phone) && guests.findIndex((x) => x.phone === g.phone) === i);
 
   // Ask for the link straight away, so the tap can open WhatsApp at once (browsers block
@@ -32,33 +30,6 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
       live = false;
     };
   }, [orderId]);
-
-  useEffect(() => {
-    if (!token || typeof navigator.canShare !== "function") return;
-    let live = true;
-    void fetch(`/b/${token}/opengraph-image`)
-      .then((r) => (r.ok ? r.blob() : null))
-      .then((b) => {
-        if (!live || !b) return;
-        const file = new File([b], "bill.png", { type: "image/png" });
-        if (navigator.canShare({ files: [file] })) setImage(file);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [token]);
-
-  async function shareImage() {
-    if (!image || !token) return;
-    const one = people.length === 1 ? people[0].name : null;
-    try {
-      await navigator.share({ files: [image], text: message(token, one) });
-      setError(null);
-    } catch (e) {
-      if ((e as Error).name !== "AbortError") setError("Couldn't open the share menu. Use the buttons above instead.");
-    }
-  }
 
   const message = (t: string, name: string | null) =>
     billMessage({ cafeName: cafe?.name ?? "our café", guestName: name, total, link: `${location.origin}/b/${t}`, reviewUrl: cafe?.google_review_url });
@@ -127,18 +98,15 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
           <button className="h-11 rounded-lg bg-stone-900 px-4 text-sm font-bold text-white">Send</button>
         </form>
       </div>
-      {image && (
-        <button
-          onClick={shareImage}
-          className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-white text-sm font-semibold text-emerald-900 ring-1 ring-emerald-300 hover:bg-emerald-100/50"
-        >
-          🖼 Share bill as a picture
-          <span className="font-normal text-emerald-900/60">(pick the chat in WhatsApp)</span>
-        </button>
-      )}
       {error && <p className="mt-2 text-xs font-medium text-red-700">{error}</p>}
-      {cafe && !cafe.google_review_url && !error && (
-        <p className="mt-2 text-xs text-emerald-900/70">Add your Google review link in Settings to ask for a review in the same message.</p>
+      {cafe && !cafe.google_review_url && (
+        <a
+          href="/admin/settings#google-review"
+          className="mt-2 flex h-10 items-center justify-center gap-1.5 rounded-lg bg-white text-sm font-semibold text-amber-800 ring-1 ring-amber-300 hover:bg-amber-50"
+        >
+          ⭐ Add your Google review link
+          <span className="font-normal text-amber-800/70">to ask for a review too</span>
+        </a>
       )}
     </div>
   );

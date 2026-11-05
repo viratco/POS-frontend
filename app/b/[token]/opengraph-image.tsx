@@ -3,8 +3,8 @@ import { formatINR } from "@/lib/money";
 import { payLabel } from "@/lib/payments";
 import { billWhen, publicBill } from "@/lib/publicBill";
 
-// The picture of the bill that WhatsApp shows when the link is sent, and that "Share bill image"
-// attaches. 1200×630 is the size WhatsApp shows as a large preview.
+// The picture of the bill that WhatsApp shows as the link's preview when the bill is sent.
+// 1200×630 is the size WhatsApp shows as a large preview.
 export const alt = "Your bill";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
@@ -45,6 +45,9 @@ export default async function Image({ params }: { params: Promise<{ token: strin
             ))}
             {more > 0 && <div style={{ display: "flex", fontSize: 24, color: MUTED }}>+ {more} more item{more > 1 ? "s" : ""}</div>}
           </div>
+          <div style={{ display: "flex", marginTop: "auto", alignItems: "center", gap: 10, fontSize: 20, color: MUTED }}>
+            Digital bill by <span style={{ color: MAROON, letterSpacing: 5 }}>MEZANA</span>
+          </div>
         </div>
 
         {/* total and the ask */}
@@ -57,7 +60,7 @@ export default async function Image({ params }: { params: Promise<{ token: strin
           </div>
           <div style={{ display: "flex", flexDirection: "column", background: "#fff", borderRadius: 28, padding: "28px 32px", alignItems: "center", textAlign: "center" }}>
             {cafe.google_review_url ? (
-              <>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: 6 }}>
                   {[0, 1, 2, 3, 4].map((k) => (
                     <svg key={k} width="34" height="34" viewBox="0 0 24 24">
@@ -67,12 +70,12 @@ export default async function Image({ params }: { params: Promise<{ token: strin
                 </div>
                 <div style={{ display: "flex", fontSize: 28, marginTop: 8 }}>Enjoyed your visit?</div>
                 <div style={{ display: "flex", fontSize: 22, marginTop: 6, color: MUTED }}>Tap to view the bill & review us on Google</div>
-              </>
+              </div>
             ) : (
-              <>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
                 <div style={{ display: "flex", fontSize: 30 }}>Thank you!</div>
                 <div style={{ display: "flex", fontSize: 22, marginTop: 6, color: MUTED }}>Tap to view your full bill</div>
-              </>
+              </div>
             )}
           </div>
         </div>

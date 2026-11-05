@@ -135,6 +135,7 @@ export default function CafeSettings() {
               <input maxLength={120} value={draft.bill_footer} onChange={set("bill_footer")} className="input" />
             </Field>
             {cafe && hasReviewLink(cafe) && (
+              <div id="google-review" className="scroll-mt-24">
               <Field label="Google review link" hint="Sent with WhatsApp bills and printed as a QR code on receipts">
                 <input
                   maxLength={300}
@@ -148,6 +149,7 @@ export default function CafeSettings() {
                   In your Google Business Profile, tap “Ask for reviews” and copy the link.
                 </span>
               </Field>
+              </div>
             )}
 
             <div className="flex flex-wrap items-center gap-3 border-t border-stone-100 pt-5">
