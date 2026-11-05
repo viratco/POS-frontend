@@ -3,7 +3,7 @@
 // as usual. Data (tables, orders, menu) is kept by the page itself, not here.
 
 const PAGES = "pos-pages-v1";
-const FILES = "pos-files-v1";
+const FILES = "pos-files-v2"; // v2: new app icons and manifests
 const OFFLINE_PAGES = ["/staff", "/kitchen"];
 const MAX_FILES = 400;
 
