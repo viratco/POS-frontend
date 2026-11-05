@@ -149,7 +149,7 @@ export default function BillsList() {
                         aria-expanded={sharing === r.id}
                         className={`h-10 rounded-xl px-4 text-sm font-bold ring-1 ${sharing === r.id ? "bg-emerald-50 text-emerald-800 ring-emerald-300" : "text-stone-800 ring-stone-300 hover:bg-stone-50"}`}
                       >
-                        WhatsApp
+                        Send
                       </button>
                     )}
                     <button
