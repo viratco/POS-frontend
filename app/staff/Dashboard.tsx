@@ -3,6 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DietMark } from "@/components/MenuMarks";
+import WhatsAppBill from "@/components/WhatsAppBill";
 import OfflineBar from "@/components/OfflineBar";
 import PrintSheet, { type PrintJob } from "@/components/PrintSheet";
 import SoundToggle from "@/components/SoundToggle";
@@ -1156,6 +1157,8 @@ function TableDrawer({
   const [paying, setPaying] = useState<Order | null>(null);
   // A bill paid offline: printed from this screen.
   const [paidReceipt, setPaidReceipt] = useState<Receipt | null>(null);
+  // Who was on the bill when it was paid (the table's guest list clears once it's free).
+  const [paidGuests, setPaidGuests] = useState<Guest[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRemoved, setShowRemoved] = useState(false);
@@ -1457,6 +1460,7 @@ function TableDrawer({
           onPay={async (method, discount, splits) => {
             setBusy(true);
             setError(null);
+            setPaidGuests(guests);
             const res = await onPay(method, discount, splits);
             setBusy(false);
             if ("error" in res) {
@@ -1476,6 +1480,8 @@ function TableDrawer({
             return total;
           }}
           onPrintReceipt={() => (paidReceipt ? onPrint({ kind: "receipt", receipt: paidReceipt }) : openPrint(paying.id, "receipt"))}
+          // Bills saved on this device go out on WhatsApp from the Bills page once they're sent.
+          whatsapp={paidReceipt ? null : { orderId: paying.id, guests: paidGuests }}
           onDone={() => {
             setPaying(null);
             onClose();
@@ -1663,6 +1669,7 @@ function PaymentModal({
   onClose,
   onPay,
   onPrintReceipt,
+  whatsapp,
   onDone,
 }: {
   tableName: string;
@@ -1672,6 +1679,7 @@ function PaymentModal({
   onClose: () => void;
   onPay: (method: PayMethod, discount: Discount, splits?: PaySplit[]) => Promise<number | null>;
   onPrintReceipt: () => void;
+  whatsapp: { orderId: string; guests: Guest[] } | null;
   onDone: () => void;
 }) {
   const [paid, setPaid] = useState<{ how: string; total: number } | null>(null);
@@ -1728,6 +1736,14 @@ function PaymentModal({
             >
               🖨 Print receipt
             </button>
+          )}
+          {paid.total > 0 && whatsapp && (
+            <div className="mt-3 w-full">
+              <WhatsAppBill orderId={whatsapp.orderId} total={paid.total} guests={whatsapp.guests} />
+            </div>
+          )}
+          {paid.total > 0 && !whatsapp && (
+            <p className="mt-3 text-xs text-stone-500">Saved on this device. Send it on WhatsApp from Bills once the internet is back.</p>
           )}
           <button onClick={onDone} className="mt-3 h-12 w-full rounded-xl font-semibold text-stone-500 ring-1 ring-stone-200 hover:bg-stone-50">
             Done

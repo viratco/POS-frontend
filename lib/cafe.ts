@@ -21,6 +21,7 @@ export type Cafe = {
   invoice_prefix: string;
   logo_url: string | null;
   qr_logo_url: string | null;
+  google_review_url?: string | null; // for the WhatsApp bill and the printed receipt (RUN_THIS_whatsapp_bills.sql)
   floor_plan?: unknown; // see lib/floorPlan.ts (readPlan)
   theme?: string | null; // see lib/themes.ts
 };

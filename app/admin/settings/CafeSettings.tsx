@@ -16,6 +16,7 @@ type Draft = {
   fssai: string;
   bill_footer: string;
   gst_percent: string;
+  google_review_url: string;
 };
 
 const toDraft = (c: Cafe): Draft => ({
@@ -27,7 +28,11 @@ const toDraft = (c: Cafe): Draft => ({
   fssai: c.fssai ?? "",
   bill_footer: c.bill_footer,
   gst_percent: String(c.gst_rate_bps / 100),
+  google_review_url: c.google_review_url ?? "",
 });
+
+// The review link column arrives with RUN_THIS_whatsapp_bills.sql; until then the field stays hidden.
+const hasReviewLink = (c: Cafe) => "google_review_url" in c;
 
 const GST_RATES = ["0", "5", "12", "18"];
 
@@ -53,6 +58,13 @@ export default function CafeSettings() {
       setMsg({ ok: false, text: "GSTIN should be 15 characters, e.g. 09ABCDE1234F1Z5." });
       return;
     }
+    let review = draft.google_review_url.trim();
+    if (review && !/^https?:\/\//i.test(review)) review = `https://${review}`;
+    review = review.replace(/^http:\/\//i, "https://");
+    if (review && (!/^https:\/\/[^\s]+\.[^\s]+$/.test(review) || review.length > 300)) {
+      setMsg({ ok: false, text: "The Google review link should look like https://g.page/r/…/review" });
+      return;
+    }
     setBusy(true);
     setMsg(null);
     const blank = (v: string) => v.trim() || null;
@@ -67,6 +79,7 @@ export default function CafeSettings() {
         fssai: blank(draft.fssai),
         bill_footer: draft.bill_footer.trim() || "Thank you! Visit again.",
         gst_rate_bps: Math.round(Number(draft.gst_percent) * 100),
+        ...(hasReviewLink(cafe) ? { google_review_url: review || null } : {}),
       })
       .eq("id", cafe.id);
     setBusy(false);
@@ -121,6 +134,21 @@ export default function CafeSettings() {
             <Field label="Message at the bottom of bills">
               <input maxLength={120} value={draft.bill_footer} onChange={set("bill_footer")} className="input" />
             </Field>
+            {cafe && hasReviewLink(cafe) && (
+              <Field label="Google review link" hint="Sent with WhatsApp bills and printed as a QR code on receipts">
+                <input
+                  maxLength={300}
+                  value={draft.google_review_url}
+                  onChange={set("google_review_url")}
+                  placeholder="https://g.page/r/…/review"
+                  inputMode="url"
+                  className="input"
+                />
+                <span className="mt-1 block text-xs text-stone-400">
+                  In your Google Business Profile, tap “Ask for reviews” and copy the link.
+                </span>
+              </Field>
+            )}
 
             <div className="flex flex-wrap items-center gap-3 border-t border-stone-100 pt-5">
               <button disabled={busy} className="h-11 rounded-xl bg-stone-900 px-6 font-bold text-white disabled:opacity-50">

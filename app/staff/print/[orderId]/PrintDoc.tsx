@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
+import QRCode from "qrcode";
 import { useEffect, useState } from "react";
 import { RESTAURANT_SAC } from "@/lib/business";
 import { type Cafe, loadCafe } from "@/lib/cafe";
@@ -216,7 +217,32 @@ export function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "
         {isInvoice && <div className="text-[0.85em]">SAC {RESTAURANT_SAC} · Restaurant service</div>}
         <div className="mt-[1mm] font-semibold">{cafe?.bill_footer}</div>
       </div>
+      {isInvoice && cafe?.google_review_url && <ReviewQr url={cafe.google_review_url} />}
     </div>
+  );
+}
+
+// "Review us on Google" QR at the foot of a paid receipt. Made on this device, so it prints offline too.
+function ReviewQr({ url }: { url: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void QRCode.toDataURL(url, { margin: 1, width: 240, errorCorrectionLevel: "M" }).then((d) => live && setSrc(d), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [url]);
+  if (!src) return null;
+  return (
+    <>
+      <Hr />
+      <div className="flex flex-col items-center text-center">
+        <div className="font-semibold">Enjoyed your visit?</div>
+        <div className="text-[0.9em]">Scan to review us on Google</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="Google review QR code" className="mt-[1.5mm]" style={{ width: "24mm", height: "24mm", imageRendering: "pixelated" }} />
+      </div>
+    </>
   );
 }
 

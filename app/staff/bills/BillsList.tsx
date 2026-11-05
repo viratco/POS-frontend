@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
+import WhatsAppBill from "@/components/WhatsAppBill";
 import { formatINR } from "@/lib/money";
 import { paidBy, payLabel, type PayMethod } from "@/lib/payments";
 import { supabaseBrowser } from "@/lib/supabase/browser";
@@ -16,6 +17,7 @@ type BillRow = {
   offline_note?: string | null; // what the server adjusted when an offline bill was sent
   tables: { name: string } | null;
   payments: { method: PayMethod; amount_paise: number }[];
+  order_guests?: { name: string; phone: string }[];
 };
 
 function todayISO() {
@@ -30,6 +32,7 @@ export default function BillsList() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -45,7 +48,7 @@ export default function BillsList() {
     end.setDate(end.getDate() + 1);
     const { data, error } = await supabaseBrowser()
       .from("orders")
-      .select("*, tables(name), payments(method, amount_paise)")
+      .select("*, tables(name), payments(method, amount_paise), order_guests(name, phone)")
       .eq("status", "paid")
       .gte("closed_at", start.toISOString())
       .lt("closed_at", end.toISOString())
@@ -112,7 +115,7 @@ export default function BillsList() {
           ) : (
             <ul className="divide-y divide-stone-100">
               {shown.map((r) => (
-                <li key={r.id} className="flex items-center gap-4 px-4 py-3">
+                <li key={r.id} className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 font-semibold tabular-nums">
                       {r.invoice_no ?? "—"}
@@ -139,12 +142,28 @@ export default function BillsList() {
                     {r.offline_note && <div className="mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">⚠ {r.offline_note}</div>}
                   </div>
                   <div className="text-lg font-bold tabular-nums">{formatINR(r.total_paise)}</div>
-                  <button
-                    onClick={() => window.open(`/staff/print/${r.id}?type=receipt&auto=1`, "_blank")}
-                    className="h-10 rounded-xl px-4 text-sm font-bold text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50"
-                  >
-                    🖨 Print
-                  </button>
+                  <div className="flex gap-2">
+                    {r.total_paise > 0 && (
+                      <button
+                        onClick={() => setSharing(sharing === r.id ? null : r.id)}
+                        aria-expanded={sharing === r.id}
+                        className={`h-10 rounded-xl px-4 text-sm font-bold ring-1 ${sharing === r.id ? "bg-emerald-50 text-emerald-800 ring-emerald-300" : "text-stone-800 ring-stone-300 hover:bg-stone-50"}`}
+                      >
+                        WhatsApp
+                      </button>
+                    )}
+                    <button
+                      onClick={() => window.open(`/staff/print/${r.id}?type=receipt&auto=1`, "_blank")}
+                      className="h-10 rounded-xl px-4 text-sm font-bold text-stone-800 ring-1 ring-stone-300 hover:bg-stone-50"
+                    >
+                      🖨 Print
+                    </button>
+                  </div>
+                  {sharing === r.id && (
+                    <div className="w-full sm:pl-0">
+                      <WhatsAppBill orderId={r.id} total={r.total_paise} guests={r.order_guests ?? []} />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
