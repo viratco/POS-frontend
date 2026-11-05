@@ -43,18 +43,6 @@ async function Bill({ params }: { params: Promise<{ token: string }> }) {
   return (
     <main className="min-h-screen bg-[#f6f1e8] px-4 py-8 text-stone-900 print:bg-white print:p-0">
       <div className="mx-auto max-w-md">
-        <a
-          href="https://www.mezana.in"
-          target="_blank"
-          rel="noopener"
-          className="mb-4 flex items-center justify-between rounded-2xl bg-[#1b070b] px-4 py-3 text-[#f7eedd] print:hidden"
-        >
-          <span className="flex items-center gap-2.5">
-            <MezanaEmblem className="h-7 w-auto" />
-            <MezanaWordmark className="h-3.5 w-auto text-[#f7eedd]" />
-          </span>
-          <span className="text-[11px] font-semibold tracking-[0.16em] text-[#be9445] uppercase">Digital bill</span>
-        </a>
         <article className="rounded-3xl bg-white p-6 shadow-[0_20px_50px_-30px_rgba(60,30,20,.45)] ring-1 ring-stone-200 print:shadow-none print:ring-0">
           <header className="text-center">
             {cafe.logo_url ? (
