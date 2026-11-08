@@ -12,7 +12,7 @@ import { chime } from "@/lib/chime";
 import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } from "@/lib/kitchenWhatsApp";
 import { type Cafe, loadCafe } from "@/lib/cafe";
 import { autoPlan, readPlan, SOHEES_PLAN, spotNumber } from "@/lib/floorPlan";
-import { applyDiscount, billFor, type Discount, formatINR, gstRate } from "@/lib/money";
+import { applyDiscount, billFor, type Discount, discountForTotal, formatINR, gstRate } from "@/lib/money";
 import { mainMethod, PAY_METHODS, paidBy, payLabel, type PayMethod, type PaySplit } from "@/lib/payments";
 import { applyActions, localDay } from "@/lib/offline/apply";
 import { checkConnection, isNetworkError, reportNetworkFailure, useOnline } from "@/lib/offline/net";
@@ -1653,6 +1653,18 @@ function Modal({ onClose, children, wide }: { onClose: () => void; children: Rea
 
 const QUICK_PERCENTS = [5, 10, 15, 20];
 const QUICK_REASONS = ["Regular guest", "Birthday", "Staff", "Complaint", "Owner's guest"];
+const AMOUNT_REASONS = ["Round off", "Regular guest", "Complaint", "Owner's guest"];
+
+// 45000 -> "450", 45050 -> "450.50": an amount as staff would type it.
+function toInput(paise: number) {
+  return paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100);
+}
+
+// Round-off amounts below the bill: ₹527 -> ₹520, ₹500.
+function roundOffs(total: number) {
+  const out = [1000, 5000, 10000].map((step) => Math.floor(total / step) * step).filter((v) => v > 0 && v < total);
+  return [...new Set(out)].sort((a, b) => b - a);
+}
 
 // "12.5" -> 1250 (basis points for %, paise for ₹). Returns null if not a valid number.
 function parseValue(input: string): number | null {
@@ -1689,11 +1701,24 @@ function PaymentModal({
   const [kind, setKind] = useState<"percent" | "amount">("percent");
   const [input, setInput] = useState("");
   const [reason, setReason] = useState("");
+  // Staff typed the amount to take instead: the difference is billed as a ₹ discount.
+  const [custom, setCustom] = useState<string | null>(null);
+  const [customReason, setCustomReason] = useState("");
 
   const parsed = parseValue(input);
   const invalid =
     input.trim() !== "" && (parsed === null || (kind === "percent" && parsed > 10000) || (kind === "amount" && parsed > bill.subtotal));
-  const discount: Discount = showDiscount && parsed && !invalid ? { type: kind, value: parsed, reason } : null;
+  const target = custom === null ? null : parseValue(custom);
+  const customOff = target === null ? null : discountForTotal(bill.subtotal, target, bill.rateBps);
+  const customInvalid = custom !== null && customOff === null;
+  const discount: Discount =
+    custom !== null
+      ? customOff
+        ? { type: "amount", value: customOff, reason: customReason.trim() || "Amount changed" }
+        : null
+      : showDiscount && parsed && !invalid
+        ? { type: kind, value: parsed, reason }
+        : null;
   const final = applyDiscount(bill.subtotal, discount, bill.rateBps);
 
   const splits: PaySplit[] = PAY_METHODS.flatMap((method) => {
@@ -1703,6 +1728,7 @@ function PaymentModal({
   const partsInvalid = PAY_METHODS.some((m) => parts[m].trim() !== "" && parseValue(parts[m]) === null);
   const left = final.total - splits.reduce((s, p) => s + p.amount, 0);
   const splitReady = !partsInvalid && splits.length >= 2 && left === 0;
+  const blocked = (custom === null && invalid) || customInvalid;
 
   async function pay(method: PayMethod, parts?: PaySplit[]) {
     const total = await onPay(method, discount, parts);
@@ -1762,6 +1788,91 @@ function PaymentModal({
           {final.discount > 0 && <span className="text-lg text-stone-400 line-through tabular-nums">{formatINR(bill.total)}</span>}
         </div>
 
+        {/* amount to take, typed by staff */}
+        {custom === null ? (
+          <button
+            onClick={() => {
+              setCustom(toInput(final.total));
+              setShowDiscount(false);
+              setInput("");
+              setReason("");
+            }}
+            className="mt-1 text-sm font-semibold text-sky-700 hover:text-sky-900"
+          >
+            ✏️ Change amount
+          </button>
+        ) : (
+          <div className="mt-3 rounded-2xl bg-sky-50/50 p-4 ring-1 ring-sky-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-sky-800">Amount to take</span>
+              <button
+                onClick={() => {
+                  setCustom(null);
+                  setCustomReason("");
+                }}
+                className="text-xs font-semibold text-stone-500 hover:text-red-600"
+              >
+                Back to {formatINR(bill.total)}
+              </button>
+            </div>
+            <div className="mt-2 flex items-center rounded-xl bg-white ring-1 ring-stone-200 focus-within:ring-2 focus-within:ring-sky-500">
+              <span className="pl-4 text-2xl text-stone-400">₹</span>
+              <input
+                autoFocus
+                inputMode="decimal"
+                value={custom}
+                onChange={(e) => setCustom(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                aria-label="Amount to take"
+                className="h-14 w-full bg-transparent px-2 text-2xl font-bold tabular-nums outline-none"
+              />
+            </div>
+            {roundOffs(bill.total).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {roundOffs(bill.total).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setCustom(toInput(v));
+                      if (!customReason) setCustomReason("Round off");
+                    }}
+                    className={`rounded-lg px-3 py-2 text-sm font-bold ring-1 ${target === v ? "bg-sky-600 text-white ring-sky-600" : "bg-white text-stone-700 ring-stone-200"}`}
+                  >
+                    {formatINR(v)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {customInvalid && (
+              <p className="mt-1.5 text-xs font-medium text-red-600">
+                {target === null ? "Enter the amount as a number, e.g. 450." : `It can't be more than the bill (${formatINR(bill.total)}). Add an item instead.`}
+              </p>
+            )}
+            {!customInvalid && target !== null && final.total !== target && (
+              <p className="mt-1.5 text-xs text-stone-500">GST rounding makes this {formatINR(final.total)}.</p>
+            )}
+            <input
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+              maxLength={60}
+              placeholder="Reason (optional)"
+              className="mt-2 h-10 w-full rounded-xl bg-white px-3 text-sm ring-1 ring-stone-200 outline-none focus:ring-2 focus:ring-sky-500"
+            />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {AMOUNT_REASONS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setCustomReason(r)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${customReason === r ? "bg-stone-900 text-white" : "bg-white text-stone-600 ring-1 ring-stone-200"}`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-stone-500">The difference shows on the bill as a discount, and GST is worked out on the new amount.</p>
+          </div>
+        )}
+
         {/* breakdown */}
         <div className="mt-3 space-y-0.5 rounded-xl bg-stone-50 px-4 py-3 text-sm">
           <Row label="Items" value={formatINR(final.subtotal)} />
@@ -1777,7 +1888,7 @@ function PaymentModal({
         </div>
 
         {/* discount */}
-        {!showDiscount ? (
+        {custom !== null ? null : !showDiscount ? (
           <button
             onClick={() => setShowDiscount(true)}
             className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-stone-300 py-3 text-sm font-semibold text-stone-600 hover:border-stone-400 hover:bg-stone-50"
@@ -1915,7 +2026,7 @@ function PaymentModal({
                       : "Adds up to the full bill ✓"}
             </p>
             <button
-              disabled={busy || invalid || !splitReady}
+              disabled={busy || blocked || !splitReady}
               onClick={() => pay(mainMethod(splits), splits)}
               className="mt-3 h-14 w-full rounded-xl bg-emerald-600 text-lg font-bold text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
             >
@@ -1928,7 +2039,7 @@ function PaymentModal({
         ) : (
           <div className="mt-2 grid grid-cols-2 gap-3">
             <button
-              disabled={busy || invalid}
+              disabled={busy || blocked}
               onClick={() => pay("upi")}
               className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-stone-900 text-white transition hover:bg-stone-800 active:scale-[0.98] disabled:opacity-50"
             >
@@ -1936,7 +2047,7 @@ function PaymentModal({
               <span className="text-lg font-bold">UPI</span>
             </button>
             <button
-              disabled={busy || invalid}
+              disabled={busy || blocked}
               onClick={() => pay("cash")}
               className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-emerald-600 text-white transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-50"
             >
@@ -1944,7 +2055,7 @@ function PaymentModal({
               <span className="text-lg font-bold">Cash</span>
             </button>
             <button
-              disabled={busy || invalid}
+              disabled={busy || blocked}
               onClick={() => pay("card")}
               className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-indigo-600 text-white transition hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-50"
             >
@@ -1952,7 +2063,7 @@ function PaymentModal({
               <span className="text-lg font-bold">Card</span>
             </button>
             <button
-              disabled={busy || invalid || final.total === 0}
+              disabled={busy || blocked || final.total === 0}
               onClick={() => setHybrid(true)}
               className="flex h-20 flex-col items-center justify-center gap-0.5 rounded-2xl bg-amber-500 text-stone-950 transition hover:bg-amber-400 active:scale-[0.98] disabled:opacity-50"
             >

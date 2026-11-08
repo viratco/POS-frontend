@@ -55,3 +55,12 @@ export function applyDiscount(subtotalPaise: number, discount: Discount, rateBps
   const gst = gstPaise(taxable, rateBps);
   return { subtotal: subtotalPaise, discount: off, taxable, gst, total: taxable + gst, rateBps };
 }
+
+// The ₹ discount that makes the bill come to `totalPaise` incl. GST (or the nearest paisa below,
+// when GST rounding can't land on it exactly). Null if that's more than the bill.
+export function discountForTotal(subtotalPaise: number, totalPaise: number, rateBps = rate): number | null {
+  if (totalPaise < 0 || totalPaise > subtotalPaise + gstPaise(subtotalPaise, rateBps)) return null;
+  let taxable = Math.min(subtotalPaise, Math.floor((totalPaise * 10000) / (10000 + rateBps)) + 2);
+  while (taxable > 0 && taxable + gstPaise(taxable, rateBps) > totalPaise) taxable--;
+  return subtotalPaise - taxable;
+}
