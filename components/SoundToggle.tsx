@@ -17,9 +17,18 @@ export default function SoundToggle({ big = false }: { big?: boolean }) {
         setOn(true);
         setTimeout(chime, 50);
       }}
-      className={`rounded-lg ${size} ${color}`}
+      className={`shrink-0 whitespace-nowrap rounded-lg ${size} ${color}`}
     >
-      {on ? "🔔 Sound on" : big ? "🔕 Tap to enable sound" : "🔕 Enable sound"}
+      {on ? (
+        "🔔 Sound on"
+      ) : big ? (
+        "🔕 Tap to enable sound"
+      ) : (
+        <>
+          🔕 <span className="hidden sm:inline">Enable sound</span>
+          <span className="sm:hidden">Sound</span>
+        </>
+      )}
     </button>
   );
 }

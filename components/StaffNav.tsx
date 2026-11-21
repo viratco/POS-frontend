@@ -1,6 +1,7 @@
 "use client";
 
 import Link, { useLinkStatus } from "next/link";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { forgetSavedCafe, initial, useCafe } from "@/lib/cafe";
 import { forgetCafeData, readQueue } from "@/lib/offline/store";
@@ -22,6 +23,28 @@ const links = [
 export default function StaffNav({ children }: { children?: React.ReactNode }) {
   const pathname = usePathname();
   const cafe = useCafe();
+  const navRef = useRef<HTMLElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
+  // On phones the tabs scroll sideways: bring the open one into view (after layout settles).
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      const nav = navRef.current;
+      const on = nav?.querySelector<HTMLElement>("[data-on]");
+      if (nav && on && nav.scrollWidth > nav.clientWidth)
+        nav.scrollTo({ left: on.offsetLeft - nav.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2, behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [pathname]);
+  // The bar is one or two rows depending on the screen; pages with sticky bars under it read this.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty("--staff-nav-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   async function signOut() {
     // Changes made offline stay on this device until they're sent; signing out stops that.
@@ -40,14 +63,16 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
 
   return (
     <>
-    <header className="no-print sticky top-0 z-30 border-b border-[color:var(--t-ece3d6)] bg-[color:var(--t-fdfbf7)]/95 backdrop-blur-md">
-      <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+    <header ref={headerRef} className="no-print sticky top-0 z-30 border-b border-[color:var(--t-ece3d6)] bg-[color:var(--t-fdfbf7)]/95 backdrop-blur-md">
+      {/* Brand + buttons on the first row and the tabs on their own row, so no tab gets squeezed.
+          Only very wide screens have room for everything on one row. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 px-3 py-2 sm:gap-x-3 sm:px-6 min-[1800px]:h-16 min-[1800px]:flex-nowrap min-[1800px]:py-0">
         {/* Mezana brand, then the caf\u00e9 this device is signed in to. */}
         <Link href="/staff" title="Mezana" className="flex shrink-0 items-center gap-2">
-          <MezanaEmblem className="h-10 w-auto" />
+          <MezanaEmblem className="h-9 w-auto sm:h-10" />
           <MezanaWordmark className="hidden h-[15px] w-auto text-[#5e1420] lg:block" />
         </Link>
-        <div className="h-8 w-px shrink-0 bg-[color:var(--t-ded3c2)]" />
+        <div className="hidden h-8 w-px shrink-0 bg-[color:var(--t-ded3c2)] sm:block" />
         <div className="flex shrink-0 items-center gap-2.5 pr-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[color:var(--t-2a1a10)] font-poster text-lg text-[color:var(--t-ecd5b1)] italic shadow-sm">{initial(cafe?.name)}</div>
           <div className="hidden leading-tight sm:block">
@@ -57,13 +82,17 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
         </div>
 
         {/* Scrolls sideways on phones instead of pushing the page wider than the screen. */}
-        <nav className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[color:var(--t-ded3c2)] bg-[color:var(--t-f4ece0)]/70 p-1 [scrollbar-width:none]">
+        <nav
+          ref={navRef}
+          className="order-last flex w-full min-w-0 gap-1 overflow-x-auto scroll-smooth rounded-xl border border-[color:var(--t-ded3c2)] bg-[color:var(--t-f4ece0)]/70 p-1 [scrollbar-width:none] min-[1800px]:order-none min-[1800px]:w-auto [&::-webkit-scrollbar]:hidden"
+        >
           {links.map((l) => {
             const on = pathname === l.href;
             return (
               <Link
                 key={l.href}
                 href={l.href}
+                data-on={on || undefined}
                 // Preloaded in the background so tabs open instantly. (This bar only shows when signed
                 // in, and signing in/out reloads the page, so no signed-out redirect gets cached.)
                 className={`relative flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition sm:px-4 ${
@@ -73,7 +102,7 @@ export default function StaffNav({ children }: { children?: React.ReactNode }) {
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <path d={l.icon} />
                 </svg>
-                <span className="hidden sm:inline">{l.label}</span>
+                <span>{l.label}</span>
                 <PendingBar />
               </Link>
             );
