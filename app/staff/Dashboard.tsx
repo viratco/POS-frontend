@@ -39,6 +39,11 @@ const STATE: Record<TableState, { label: string; hint: string; stripe: string; c
   available: { label: "Available", hint: "", stripe: "bg-[color:var(--t-d8cebe)]", chip: "bg-[color:var(--t-f4eee4)] text-[color:var(--t-786959)] ring-[color:var(--t-e2d7c7)]", dot: "bg-[color:var(--t-b8aa96)]", glow: "ring-[color:var(--t-e2d7c7)]" },
 };
 
+/** Rooms are kept as tables named "Room 101", "Room 5"… and shown in their own section. */
+function isRoom(name: string) {
+  return /^room\b/i.test(name.trim());
+}
+
 function stateOf(items: OrderItem[] | undefined): TableState {
   if (!items) return "available";
   const live = items.filter((i) => i.status !== "void");
@@ -147,8 +152,7 @@ export default function Dashboard() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [cafe, setCafe] = useState<Cafe | null>(null);
-  const [chosenView, setViewMode] = useState<"floorplan" | "cards">("floorplan");
-  const viewMode = chosenView;
+  const [newRoom, setNewRoom] = useState<string | null>(null); // the "Add room" box, when open
   const [accepting, setAccepting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -380,6 +384,10 @@ export default function Dashboard() {
     return { table: t, order, items: orderItems ?? [], state: stateOf(orderItems), guests: order ? (guestsByOrder.get(order.id) ?? []) : [] };
   });
 
+  // Rooms (tables named "Room …") get their own section; everything else is a café table.
+  const roomRows = rows.filter((r) => isRoom(r.table.name)).sort((a, b) => a.table.name.localeCompare(b.table.name, undefined, { numeric: true }));
+  const tableRows = rows.filter((r) => !isRoom(r.table.name));
+
   // This café's own saved floor plan; Sohee's drawn room; or a tidy grid of its tables.
   const plan =
     readPlan(cafe?.floor_plan) ??
@@ -392,14 +400,15 @@ export default function Dashboard() {
 
   const qtyWhere = (st: OrderItem["status"]) => items.filter((i) => i.status === st).reduce((n, i) => n + i.qty, 0);
   const counts = {
-    occupied: rows.filter((r) => r.order).length,
-    action: rows.filter((r) => r.state === "new_order" || r.state === "food_ready").length,
-    available: rows.filter((r) => !r.order).length,
+    occupied: tableRows.filter((r) => r.order).length,
+    action: tableRows.filter((r) => r.state === "new_order" || r.state === "food_ready").length,
+    available: tableRows.filter((r) => !r.order).length,
+    rooms: roomRows.filter((r) => r.order).length,
     readyItems: qtyWhere("ready"),
     kitchenItems: qtyWhere("pending"),
   };
 
-  const visibleRows = rows.filter((r) =>
+  const visibleRows = tableRows.filter((r) =>
     filter === "all"
       ? true
       : filter === "action"
@@ -424,6 +433,36 @@ export default function Dashboard() {
     }
     showToast(`Added ${names.join(", ")} — print their QR codes from the QR page`);
     await load();
+  }
+
+  // A new room for room orders: "12" or "Room 12" → "Room 12".
+  async function addRoom(input: string) {
+    const raw = input.trim().replace(/^room\s*/i, "");
+    if (!raw) return;
+    if (!online) {
+      setError("Adding a room needs the internet. Try again when you're back online.");
+      return;
+    }
+    const name = `Room ${raw}`;
+    const existing = roomRows.find((r) => r.table.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setNewRoom(null);
+      setSelectedId(existing.table.id);
+      return;
+    }
+    const { data, error } = await supabase
+      .from("tables")
+      .upsert({ name, is_active: true, sort_order: 100000 + (Number(raw.replace(/\D/g, "")) || 0) }, { onConflict: "cafe_id,name" })
+      .select("id")
+      .single();
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setNewRoom(null);
+    showToast(`Added ${name}`);
+    await load();
+    if (data?.id) setSelectedId(data.id);
   }
 
   async function accept(orderId: string, tableName: string, waiting: OrderItem[]) {
@@ -614,7 +653,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           <Stat
             label="Tables in use"
-            value={`${counts.occupied}/${tables.length}`}
+            value={`${counts.occupied}/${tableRows.length}`}
             icon={
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
                 <rect x="3" y="4" width="18" height="12" rx="2" />
@@ -744,42 +783,11 @@ export default function Dashboard() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* View Switcher: Cards vs Floor Plan */}
-              {(
-              <div className="flex items-center rounded-xl border border-[color:var(--t-ded3c2)] bg-white p-1 shadow-sm">
-                <button
-                  onClick={() => setViewMode("cards")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                    viewMode === "cards" ? "bg-[color:var(--t-2a2119)] text-[color:var(--t-f5ebd9)] shadow-sm" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
-                  }`}
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
-                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
-                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
-                  </svg>
-                  <span>Cards</span>
-                </button>
-                <button
-                  onClick={() => setViewMode("floorplan")}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                    viewMode === "floorplan" ? "bg-[color:var(--t-2a2119)] text-[color:var(--t-f5ebd9)] shadow-sm" : "text-[color:var(--t-7a6b5c)] hover:text-[color:var(--t-2a2119)]"
-                  }`}
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
-                    <path d="M3 3h18v18H3zM3 9h18M9 21V9" />
-                  </svg>
-                  <span>Floor Plan</span>
-                </button>
-              </div>
-              )}
-
               {/* Filter Pills */}
               <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-[color:var(--t-ded3c2)] bg-white p-1 shadow-sm">
                 {(
                   [
-                    ["all", "All", tables.length],
+                    ["all", "All", tableRows.length],
                     ["action", "Needs action", counts.action],
                     ["occupied", "In use", counts.occupied],
                     ["available", "Available", counts.available],
@@ -802,34 +810,74 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Conditional View: Floor Plan vs Card Grid */}
-          {viewMode === "floorplan" ? (
-            <div className="mt-4">
-              <CafeFloorPlan
-                plan={plan}
-                rows={rows}
-                visibleIds={filter === "all" ? undefined : new Set(visibleRows.map((r) => r.table.id))}
-                selectedId={selectedId}
-                onSelectTable={setSelectedId}
-                now={now}
-                ago={ago}
-                onSetupTables={setupTables}
-              />
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-2 gap-3.5 md:grid-cols-3 xl:grid-cols-4">
-              {visibleRows.map((r) => (
-                <TableCard key={r.table.id} {...r} now={now} selected={r.table.id === selectedId} onClick={() => setSelectedId(r.table.id)} />
-              ))}
-              {visibleRows.length === 0 && (
-                <p className="col-span-full rounded-2xl border border-[color:var(--t-ded3c2)] bg-white py-12 text-center text-[color:var(--t-8a7b6b)]">
-                  No tables match this filter right now.
-                </p>
-              )}
-            </div>
-          )}
+          <div className="mt-4">
+            <CafeFloorPlan
+              plan={plan}
+              rows={tableRows}
+              visibleIds={filter === "all" ? undefined : new Set(visibleRows.map((r) => r.table.id))}
+              selectedId={selectedId}
+              onSelectTable={setSelectedId}
+              now={now}
+              ago={ago}
+              onSetupTables={setupTables}
+            />
+          </div>
 
           <Legend />
+        </section>
+
+        {/* 3. Room orders, kept apart from the café's tables */}
+        <section className="mt-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold tracking-tight text-[color:var(--t-2a2119)]">Room orders</h2>
+              <span className="rounded-full bg-[color:var(--t-f0e7d8)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--t-6e5d4e)]">
+                {counts.rooms} active · {roomRows.length} room{roomRows.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            {newRoom === null ? (
+              <button
+                onClick={() => setNewRoom("")}
+                className="rounded-xl border border-[color:var(--t-ded3c2)] bg-white px-3 py-1.5 text-xs font-bold text-[color:var(--t-2a2119)] shadow-sm hover:border-[color:var(--t-2a2119)]/40"
+              >
+                + Add room
+              </button>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void addRoom(newRoom);
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <input
+                  autoFocus
+                  value={newRoom}
+                  onChange={(e) => setNewRoom(e.target.value)}
+                  placeholder="Room number"
+                  className="w-32 rounded-xl border border-[color:var(--t-ded3c2)] bg-white px-3 py-1.5 text-sm outline-none focus:border-[color:var(--t-2a2119)]"
+                />
+                <button type="submit" disabled={!newRoom.trim()} className="rounded-xl bg-[color:var(--t-2a2119)] px-3 py-1.5 text-xs font-bold text-[color:var(--t-f5ebd9)] disabled:opacity-40">
+                  Add
+                </button>
+                <button type="button" onClick={() => setNewRoom(null)} className="px-2 py-1.5 text-xs font-semibold text-[color:var(--t-8a7b6b)]">
+                  Cancel
+                </button>
+              </form>
+            )}
+          </div>
+
+          {roomRows.length > 0 ? (
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+              {roomRows.map((r) => (
+                <RoomCard key={r.table.id} {...r} now={now} selected={r.table.id === selectedId} onClick={() => setSelectedId(r.table.id)} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-2xl border border-dashed border-[color:var(--t-ded3c2)] bg-white/70 px-4 py-6 text-center text-sm text-[color:var(--t-8a7b6b)]">
+              No rooms yet. Tap <b>+ Add room</b> to take room orders here instead of on a café table.
+            </p>
+          )}
         </section>
       </main>
 
@@ -956,7 +1004,8 @@ function Legend() {
   );
 }
 
-function TableCard({
+/** A room's order, tracked apart from the café's tables (rooms are tables named "Room …"). */
+function RoomCard({
   table,
   order,
   items,
@@ -976,122 +1025,35 @@ function TableCard({
   onClick: () => void;
 }) {
   const s = STATE[state];
-  const n = (st: OrderItem["status"]) => items.filter((i) => i.status === st).reduce((c, i) => c + i.qty, 0);
   const liveCount = items.filter((i) => i.status !== "void").reduce((c, i) => c + i.qty, 0);
-  const tableImg = "/tables/table-topdown.png";
-
-  // Determine stage progress for active orders (0: new, 1: kitchen, 2: ready, 3: served)
-  const currentStage = state === "new_order" ? 0 : state === "in_kitchen" ? 1 : state === "food_ready" ? 2 : 3;
-
   return (
     <button
       onClick={onClick}
-      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border text-left transition-all duration-200 hover:-translate-y-1 hover:shadow-xl active:scale-[0.99] ${
+      className={`relative flex flex-col gap-2 overflow-hidden rounded-2xl border p-3.5 pl-5 text-left transition hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99] ${
         selected ? "border-[color:var(--t-2a2119)] ring-2 ring-[color:var(--t-2a2119)]" : "border-[color:var(--t-e5ded4)] hover:border-[color:var(--t-cbbfad)]"
-      } ${order ? "bg-[color:var(--t-fffdfb)] shadow-sm" : "bg-[color:var(--t-fcfaf7)]/90 hover:bg-white shadow-xs"}`}
+      } ${order ? "bg-[color:var(--t-fffdfb)] shadow-sm" : "bg-[color:var(--t-fcfaf7)]/90"}`}
     >
-      {/* Left Accent Stripe */}
-      <span className={`absolute inset-y-0 left-0 w-1.5 z-20 ${s.stripe} ${state === "new_order" ? "animate-pulse" : ""}`} />
-
-      {/* Realistic Table Hero Image Section */}
-      <div className="relative aspect-[16/11] w-full overflow-hidden bg-gradient-to-b from-[color:var(--t-f5ede0)] to-[color:var(--t-ece1cf)]/80 p-2">
-        <img
-          src={tableImg}
-          alt={table.name}
-          className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-105 drop-shadow-md"
-        />
-
-        {/* Floating Top Header Badges */}
-        <div className="absolute inset-x-2.5 top-2.5 flex items-center justify-between gap-1 z-10">
-          <span className="flex items-center gap-1.5 rounded-lg bg-[color:var(--t-2a2119)]/85 px-2.5 py-1 text-xs font-bold text-[color:var(--t-f5ebd9)] backdrop-blur-md shadow-sm">
-            <span>{table.name}</span>
-          </span>
-          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-md ${s.chip}`}>
-            {s.label}
-          </span>
-        </div>
-
-        {/* Floating Bottom Info on Image */}
-        <div className="absolute inset-x-2.5 bottom-2 flex items-center justify-between text-[11px] font-medium text-[color:var(--t-2a2119)] z-10">
-          <span className="flex items-center gap-1 rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold backdrop-blur-xs shadow-xs">
-            <svg viewBox="0 0 24 24" className="h-3 w-3 text-[color:var(--t-a89b88)]" fill="none" stroke="currentColor" strokeWidth={2}>
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 2" />
-            </svg>
-            <span>{order ? (now ? ago(order.created_at, now) : "Open") : "Free"}</span>
-          </span>
-          <span className="rounded-md bg-white/85 px-2 py-0.5 text-[10px] font-bold text-[color:var(--t-6d5e50)] backdrop-blur-xs shadow-xs">
-            4 Seats
-          </span>
-        </div>
+      <span className={`absolute inset-y-0 left-0 w-1.5 ${s.stripe} ${state === "new_order" ? "animate-pulse" : ""}`} />
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-[color:var(--t-2a2119)]">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-[color:var(--t-8a7b6b)]" fill="none" stroke="currentColor" strokeWidth={2}>
+            <path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6" />
+          </svg>
+          <span className="truncate">{table.name}</span>
+        </span>
+        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${s.chip}`}>{order ? s.label : "No order"}</span>
       </div>
-
-      {/* Card Body */}
-      <div className="flex flex-1 flex-col justify-between p-3.5 sm:p-4">
-        {order ? (
-          <div className="space-y-2.5">
-            {/* Visual 4-stage mini progress bar */}
-            <div className="grid grid-cols-4 gap-1">
-              {[
-                { label: "New", color: "bg-rose-500" },
-                { label: "Kitchen", color: "bg-amber-400" },
-                { label: "Ready", color: "bg-sky-500" },
-                { label: "Served", color: "bg-emerald-500" },
-              ].map((step, idx) => (
-                <div key={step.label} className="flex flex-col gap-1">
-                  <div
-                    className={`h-1.5 rounded-full transition-all ${
-                      idx <= currentStage ? step.color : "bg-[color:var(--t-ece4d8)]"
-                    }`}
-                  />
-                  <span className={`text-[9px] font-semibold text-center ${idx === currentStage ? "text-[color:var(--t-2a2119)]" : "text-[color:var(--t-a89b88)]"}`}>
-                    {step.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* Item status chips */}
-            <div className="flex flex-wrap gap-1 text-[11px] font-semibold pt-0.5">
-              {n("new") > 0 && <span className="rounded-md bg-rose-50 px-2 py-0.5 text-rose-700 ring-1 ring-rose-200">{n("new")} new</span>}
-              {n("ready") > 0 && <span className="rounded-md bg-sky-50 px-2 py-0.5 text-sky-700 ring-1 ring-sky-200">{n("ready")} ready</span>}
-              {n("pending") > 0 && <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200">{n("pending")} cooking</span>}
-              {n("served") > 0 && <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-emerald-700 ring-1 ring-emerald-200">{n("served")} served</span>}
-            </div>
-
-            {/* Bottom Row */}
-            <div className="flex items-end justify-between border-t border-[color:var(--t-f0e7d8)] pt-2">
-              <span className="min-w-0 text-xs font-medium text-[color:var(--t-8a7b6b)]">
-                {guests.length > 0 && (
-                  <span className="block truncate font-semibold text-[color:var(--t-2a2119)]">
-                    👤 {guests[0].name}
-                    {guests.length > 1 ? ` +${guests.length - 1}` : ""}
-                  </span>
-                )}
-                {liveCount} item{liveCount !== 1 ? "s" : ""}
-              </span>
-              <span className="text-xl font-extrabold text-[color:var(--t-2a2119)] tabular-nums tracking-tight">
-                {formatINR(billFor(items).total)}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col justify-between py-1">
-            <p className="text-xs text-[color:var(--t-8a7b6b)] leading-relaxed">
-              Available for guests. QR code active on table.
-            </p>
-            <div className="mt-3 flex items-center justify-between border-t border-dashed border-[color:var(--t-ece2d4)] pt-2 text-xs font-semibold text-[color:var(--t-8a7b6b)] group-hover:text-[color:var(--t-2a2119)]">
-              <span className="flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[color:var(--t-f4eee4)] text-xs font-bold text-[color:var(--t-6d5e50)] group-hover:bg-[color:var(--t-2a2119)] group-hover:text-white transition">
-                  +
-                </span>
-                Start an order
-              </span>
-              <span className="rounded bg-[color:var(--t-f4eee4)] px-1.5 py-0.5 text-[10px] text-[color:var(--t-6d5e50)]">Ready</span>
-            </div>
-          </div>
-        )}
-      </div>
+      {order ? (
+        <div className="flex items-end justify-between gap-2">
+          <span className="min-w-0 text-xs text-[color:var(--t-8a7b6b)]">
+            {guests.length > 0 && <span className="block truncate font-semibold text-[color:var(--t-2a2119)]">{guests[0].name}</span>}
+            {liveCount} item{liveCount !== 1 ? "s" : ""} · {now ? ago(order.created_at, now) : "open"}
+          </span>
+          <span className="text-lg font-extrabold tabular-nums text-[color:var(--t-2a2119)]">{formatINR(billFor(items).total)}</span>
+        </div>
+      ) : (
+        <span className="text-xs font-semibold text-[color:var(--t-8a7b6b)]">+ Start a room order</span>
+      )}
     </button>
   );
 }
@@ -1239,7 +1201,7 @@ function TableDrawer({
           {!order && (
             <div className="flex flex-col items-center rounded-2xl bg-white px-6 py-10 text-center ring-1 ring-stone-200">
               <div className="text-4xl">🍽️</div>
-              <p className="mt-3 font-semibold">This table is free</p>
+              <p className="mt-3 font-semibold">{isRoom(table.name) ? "No order for this room" : "This table is free"}</p>
               <p className="mt-1 text-sm text-stone-500">Guests can scan the QR, or you can take their order here.</p>
               <button onClick={() => setAdding(true)} className="mt-5 h-12 rounded-xl bg-stone-900 px-6 font-bold text-white">
                 + Take an order
@@ -1475,7 +1437,7 @@ function TableDrawer({
                 ? `✓ ${table.name} closed as complimentary`
                 : res.receipt
                   ? `✓ ${table.name} paid by ${how} · saved on this device`
-                  : `✓ ${table.name} paid by ${how} · table is free`,
+                  : `✓ ${table.name} paid by ${how}${isRoom(table.name) ? "" : " · table is free"}`,
             );
             return total;
           }}
