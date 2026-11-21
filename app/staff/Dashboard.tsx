@@ -435,6 +435,22 @@ export default function Dashboard() {
     await load();
   }
 
+  // A room added by mistake: switched off (old bills keep their room name). Only when it has no order.
+  async function removeRoom(table: Table) {
+    if (!online) {
+      setError("Removing a room needs the internet. Try again when you're back online.");
+      return;
+    }
+    const { error } = await supabase.from("tables").update({ is_active: false }).eq("id", table.id);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    setSelectedId(null);
+    showToast(`Removed ${table.name}`);
+    await load();
+  }
+
   // A new room for room orders: "12" or "Room 12" → "Room 12".
   async function addRoom(input: string) {
     const raw = input.trim().replace(/^room\s*/i, "");
@@ -913,6 +929,7 @@ export default function Dashboard() {
             if (!error) void load();
             return { error: error?.message ?? null };
           }}
+          onRemoveRoom={isRoom(selected.table.name) && !selected.order ? () => void removeRoom(selected.table) : undefined}
           onRemoveGuest={async (phone) => {
             const { error } = await supabase.rpc("staff_remove_guest", { p_order_id: selected.order!.id, p_phone: phone });
             if (!error) void load();
@@ -1079,6 +1096,7 @@ function TableDrawer({
   canEditGuests,
   onSaveGuest,
   onRemoveGuest,
+  onRemoveRoom,
   printHere,
   act,
   stamp,
@@ -1105,6 +1123,7 @@ function TableDrawer({
   canEditGuests: boolean; // so does adding guest details
   onSaveGuest: (guest: NewGuest) => Promise<{ error: string | null }>;
   onRemoveGuest: (phone: string) => Promise<{ error: string | null }>;
+  onRemoveRoom?: () => void; // only for a room with no order (e.g. added by mistake)
   printHere: boolean; // print from this screen (offline) instead of a new tab
   act: Act;
   stamp: () => Stamp;
@@ -1206,6 +1225,17 @@ function TableDrawer({
               <button onClick={() => setAdding(true)} className="mt-5 h-12 rounded-xl bg-stone-900 px-6 font-bold text-white">
                 + Take an order
               </button>
+              {onRemoveRoom && (
+                <ConfirmButton
+                  onConfirm={onRemoveRoom}
+                  disabled={!online}
+                  armedText="Tap again to remove"
+                  className="mt-3 h-10 rounded-xl px-4 text-sm font-semibold text-stone-500 hover:text-red-600 disabled:opacity-50"
+                  armedClassName="mt-3 h-10 rounded-xl bg-red-50 px-4 text-sm font-bold text-red-700 ring-1 ring-red-200"
+                >
+                  Remove this room
+                </ConfirmButton>
+              )}
             </div>
           )}
 
@@ -1538,12 +1568,14 @@ function ConfirmButton({
   disabled,
   className,
   armedClassName,
+  armedText = "Tap again to reject",
   children,
 }: {
   onConfirm: () => void;
   disabled?: boolean;
   className: string;
   armedClassName: string;
+  armedText?: string;
   children: React.ReactNode;
 }) {
   const [armed, setArmed] = useState(false);
@@ -1562,7 +1594,7 @@ function ConfirmButton({
       }}
       className={armed ? armedClassName : className}
     >
-      {armed ? "Tap again to reject" : children}
+      {armed ? armedText : children}
     </button>
   );
 }
