@@ -2,6 +2,7 @@ import type { Viewport } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { supabaseAnon } from "@/lib/supabase/server";
+import { isStaffOnlyCategory } from "@/lib/staffOnly";
 import { themeOf } from "@/lib/themes";
 import type { Category, MenuItem } from "@/lib/types";
 import MenuClient, { type Brand } from "./MenuClient";
@@ -32,7 +33,11 @@ async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
     categoriesQ = categoriesQ.eq("cafe_id", table.cafe_id);
     itemsQ = itemsQ.eq("cafe_id", table.cafe_id);
   }
-  const [{ data: categories }, { data: items }] = await Promise.all([categoriesQ, itemsQ]);
+  const [{ data: allCategories }, { data: allItems }] = await Promise.all([categoriesQ, itemsQ]);
+  // "Staff only" items are added by staff at the counter, never shown to guests.
+  const hidden = new Set(((allCategories ?? []) as Category[]).filter((c) => isStaffOnlyCategory(c.name)).map((c) => c.id));
+  const categories = ((allCategories ?? []) as Category[]).filter((c) => !hidden.has(c.id));
+  const items = ((allItems ?? []) as Partial<MenuItem>[]).filter((i) => !hidden.has(i.category_id as string));
   const brand: Brand = {
     name: table.cafe_name ?? "Sohee's Kitchen",
     slug: table.cafe_slug ?? "sohees",
@@ -45,8 +50,8 @@ async function TableMenu({ params }: { params: Promise<{ token: string }> }) {
         token={token}
         tableName={table.name}
         brand={brand}
-        categories={(categories ?? []) as Category[]}
-        items={((items ?? []) as Partial<MenuItem>[]).map(withDefaults)}
+        categories={categories}
+        items={items.map(withDefaults)}
       />
     </div>
   );

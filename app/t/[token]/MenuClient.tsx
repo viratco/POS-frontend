@@ -5,6 +5,7 @@ import { MezanaEmblem, MezanaWordmark } from "@/components/Mezana";
 import { DietMark } from "@/components/MenuMarks";
 import { formatINR } from "@/lib/money";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
+import { isRoom } from "@/lib/rooms";
 import type { Category, MenuItem, OptionGroup, PickedOption } from "@/lib/types";
 import { placeOrder, type GuestDetails, type PlacedItem } from "./actions";
 
@@ -445,7 +446,7 @@ export default function MenuClient({
               </>
             )}
           </button>
-          <p className={`mt-3 text-center text-xs ${GREY}`}>No payment now. Pay at the counter.</p>
+          <p className={`mt-3 text-center text-xs ${GREY}`}>No payment now. {isRoom(tableName) ? "Pay when your bill is ready." : "Pay at the counter."}</p>
         </Sheet>
       )}
     </div>
@@ -949,7 +950,7 @@ function Confirmation({
           </div>
         </div>
 
-        <p className={`mt-4 text-center text-sm ${GREY}`}>Taxes are added to your final bill. Pay at the counter.</p>
+        <p className={`mt-4 text-center text-sm ${GREY}`}>Taxes are added to your final bill. {isRoom(tableName) ? "Pay when your bill is ready." : "Pay at the counter."}</p>
 
         <button onClick={onAgain} className="mt-8 w-full rounded-2xl bg-[color:var(--t-1a202c)] py-4 font-bold text-white transition active:scale-[0.98]">
           Order something else

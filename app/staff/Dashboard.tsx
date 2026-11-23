@@ -24,6 +24,7 @@ import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@
 import type { Category, Guest, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
+import { isRoom } from "@/lib/rooms";
 import { acceptOrder, staffAddItems } from "./actions";
 
 /* ───────────────────────── table states ───────────────────────── */
@@ -38,11 +39,6 @@ const STATE: Record<TableState, { label: string; hint: string; stripe: string; c
   served: { label: "Served", hint: "Bill when asked", stripe: "bg-emerald-500", chip: "bg-emerald-100/90 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500", glow: "ring-emerald-400" },
   available: { label: "Available", hint: "", stripe: "bg-[color:var(--t-d8cebe)]", chip: "bg-[color:var(--t-f4eee4)] text-[color:var(--t-786959)] ring-[color:var(--t-e2d7c7)]", dot: "bg-[color:var(--t-b8aa96)]", glow: "ring-[color:var(--t-e2d7c7)]" },
 };
-
-/** Rooms are kept as tables named "Room 101", "Room 5"… and shown in their own section. */
-function isRoom(name: string) {
-  return /^room\b/i.test(name.trim());
-}
 
 function stateOf(items: OrderItem[] | undefined): TableState {
   if (!items) return "available";

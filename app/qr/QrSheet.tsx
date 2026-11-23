@@ -6,9 +6,11 @@ import StaffNav from "@/components/StaffNav";
 import { type Cafe, useCafe } from "@/lib/cafe";
 import { themeOf } from "@/lib/themes";
 import { supabaseBrowser } from "@/lib/supabase/browser";
+import { isRoom } from "@/lib/rooms";
 import type { Table } from "@/lib/types";
 
 type Layout = "a4" | "single";
+type Which = "all" | "tables" | "rooms";
 
 // Table tent card, A6 portrait (105 × 148 mm), based on the café's existing printed card.
 const CARD_W = 105;
@@ -19,6 +21,7 @@ export default function QrSheet() {
   const [baseUrl, setBaseUrl] = useState(process.env.NEXT_PUBLIC_SITE_URL ?? "");
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [layout, setLayout] = useState<Layout>("a4");
+  const [which, setWhich] = useState<Which>("all");
   const cafe = useCafe();
 
   useEffect(() => {
@@ -44,7 +47,9 @@ export default function QrSheet() {
   }, [tables, baseUrl]);
 
   const isLocal = /localhost|127\.0\.0\.1/.test(baseUrl);
-  const pages = layout === "a4" ? chunk(tables, 4) : tables.map((t) => [t]);
+  const roomCount = tables.filter((t) => isRoom(t.name)).length;
+  const shown = tables.filter((t) => (which === "all" ? true : which === "rooms" ? isRoom(t.name) : !isRoom(t.name)));
+  const pages = layout === "a4" ? chunk(shown, 4) : shown.map((t) => [t]);
 
   return (
     <div className="min-h-screen bg-[#f6f4f1] print:bg-white">
@@ -60,10 +65,30 @@ export default function QrSheet() {
       <StaffNav />
 
       <div className="no-print mx-auto max-w-5xl px-5 pt-6">
-        <h1 className="text-2xl font-bold tracking-tight">Table QR cards</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{roomCount ? "Table & room QR cards" : "Table QR cards"}</h1>
         <p className="text-sm text-stone-500">
-          One card per table, A6 size (105 × 148 mm). Print on thick paper or card, then cut along the lines.
+          One card per {roomCount ? "table or room" : "table"}, A6 size (105 × 148 mm). Print on thick paper or card, then cut along the lines.
         </p>
+
+        {roomCount > 0 && (
+          <div className="mt-4 inline-flex rounded-xl bg-white p-1 text-sm font-semibold ring-1 ring-stone-200">
+            {(
+              [
+                ["all", "All", tables.length],
+                ["tables", "Tables", tables.length - roomCount],
+                ["rooms", "Rooms", roomCount],
+              ] as const
+            ).map(([k, label, n]) => (
+              <button
+                key={k}
+                onClick={() => setWhich(k)}
+                className={`rounded-lg px-3 py-1.5 ${which === k ? "bg-stone-900 text-white" : "text-stone-500"}`}
+              >
+                {label} <span className="opacity-70">{n}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="mt-5 grid gap-4 rounded-2xl bg-white p-4 ring-1 ring-stone-200 sm:grid-cols-[1fr_auto]">
           <label className="block text-sm text-stone-600">
@@ -88,7 +113,7 @@ export default function QrSheet() {
               ))}
             </div>
             <button onClick={() => window.print()} className="h-10 rounded-xl bg-stone-900 px-5 font-bold text-white">
-              🖨 Print {tables.length} cards
+              🖨 Print {shown.length} card{shown.length === 1 ? "" : "s"}
             </button>
           </div>
         </div>
@@ -125,9 +150,9 @@ export default function QrSheet() {
       </div>
 
       <div className="no-print mx-auto max-w-5xl px-5 pb-12">
-        <h2 className="text-sm font-bold text-stone-700">Test a table</h2>
+        <h2 className="text-sm font-bold text-stone-700">Test a {which === "rooms" ? "room" : "table"}</h2>
         <div className="mt-2 flex flex-wrap gap-2">
-          {tables.map((t) => (
+          {shown.map((t) => (
             <a
               key={t.id}
               href={urlFor(baseUrl, t)}
@@ -207,9 +232,19 @@ function Card({ table, qr, cafe }: { table: Table; qr?: string; cafe: Cafe | nul
         className="absolute inset-x-0 text-center font-bold uppercase"
         style={{ top: "117mm", color: colors.soft, fontSize: "9.5pt", lineHeight: 1.45, letterSpacing: "0.02em" }}
       >
-        Order right from your table
-        <br />
-        Pay at the counter
+        {isRoom(table.name) ? (
+          <>
+            Order right from your room
+            <br />
+            We&apos;ll bring it to you
+          </>
+        ) : (
+          <>
+            Order right from your table
+            <br />
+            Pay at the counter
+          </>
+        )}
       </div>
 
       {/* Table number */}
@@ -223,10 +258,10 @@ function Card({ table, qr, cafe }: { table: Table; qr?: string; cafe: Cafe | nul
   );
 }
 
-// "Table 1" -> "TABLE NO. 1"; other names (e.g. "Window 2") are just upper-cased.
+// "Table 1" -> "TABLE NO. 1", "Room 101" -> "ROOM NO. 101"; other names (e.g. "Window 2") are just upper-cased.
 function tableLabel(name: string) {
-  const m = name.trim().match(/^table\s*(?:no\.?\s*)?(\d+)$/i);
-  return m ? `TABLE NO. ${m[1]}` : name.toUpperCase();
+  const m = name.trim().match(/^(table|room)\s*(?:no\.?\s*)?(\d+)$/i);
+  return m ? `${m[1].toUpperCase()} NO. ${m[2]}` : name.toUpperCase();
 }
 
 function chunk<T>(list: T[], size: number) {
