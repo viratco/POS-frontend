@@ -103,6 +103,8 @@ export default function BillsList() {
           <Stat label="UPI" value={formatINR(sum("upi"))} />
           <Stat label="Cash" value={formatINR(sum("cash"))} />
           <Stat label="Card" value={formatINR(sum("card"))} />
+          {sum("swiggy") > 0 && <Stat label="Swiggy" value={formatINR(sum("swiggy"))} />}
+          {sum("zomato") > 0 && <Stat label="Zomato" value={formatINR(sum("zomato"))} />}
         </div>
 
         {error && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700 ring-1 ring-red-200">{error}</p>}

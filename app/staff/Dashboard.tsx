@@ -13,7 +13,7 @@ import { kitchenTicket, openWhatsApp, setWhatsappOnAccept, whatsappOnAccept } fr
 import { type Cafe, loadCafe } from "@/lib/cafe";
 import { autoPlan, readPlan, SOHEES_PLAN, spotNumber } from "@/lib/floorPlan";
 import { applyDiscount, billFor, type Discount, discountForTotal, formatINR, gstRate } from "@/lib/money";
-import { mainMethod, PAY_METHODS, paidBy, payLabel, type PayMethod, type PaySplit } from "@/lib/payments";
+import { mainMethod, paidBy, payLabel, SPLIT_METHODS, type PayMethod, type PaySplit, type SplitMethod } from "@/lib/payments";
 import { applyActions, localDay } from "@/lib/offline/apply";
 import { checkConnection, isNetworkError, reportNetworkFailure, useOnline } from "@/lib/offline/net";
 import { enqueue, readIdMap, readMenu, readProblems, readQueue, readSnapshot, saveMenu, saveProblems, saveSnapshot } from "@/lib/offline/store";
@@ -1686,7 +1686,7 @@ function PaymentModal({
 }) {
   const [paid, setPaid] = useState<{ how: string; total: number } | null>(null);
   const [hybrid, setHybrid] = useState(false);
-  const [parts, setParts] = useState<Record<PayMethod, string>>({ upi: "", cash: "", card: "" });
+  const [parts, setParts] = useState<Record<SplitMethod, string>>({ upi: "", cash: "", card: "" });
   const [showDiscount, setShowDiscount] = useState(false);
   const [kind, setKind] = useState<"percent" | "amount">("percent");
   const [input, setInput] = useState("");
@@ -1711,11 +1711,11 @@ function PaymentModal({
         : null;
   const final = applyDiscount(bill.subtotal, discount, bill.rateBps);
 
-  const splits: PaySplit[] = PAY_METHODS.flatMap((method) => {
+  const splits: PaySplit[] = SPLIT_METHODS.flatMap((method) => {
     const amount = parseValue(parts[method]);
     return amount ? [{ method, amount }] : [];
   });
-  const partsInvalid = PAY_METHODS.some((m) => parts[m].trim() !== "" && parseValue(parts[m]) === null);
+  const partsInvalid = SPLIT_METHODS.some((m) => parts[m].trim() !== "" && parseValue(parts[m]) === null);
   const left = final.total - splits.reduce((s, p) => s + p.amount, 0);
   const splitReady = !partsInvalid && splits.length >= 2 && left === 0;
   const blocked = (custom === null && invalid) || customInvalid;
@@ -1726,7 +1726,7 @@ function PaymentModal({
   }
 
   // Fills this method with whatever is still left to pay.
-  function fillRest(m: PayMethod) {
+  function fillRest(m: SplitMethod) {
     const paise = (parseValue(parts[m]) ?? 0) + left;
     setParts({ ...parts, [m]: paise % 100 ? (paise / 100).toFixed(2) : String(paise / 100) });
   }
@@ -1980,7 +1980,7 @@ function PaymentModal({
         {hybrid && final.total > 0 ? (
           <div className="mt-2 rounded-2xl bg-stone-50 p-3 ring-1 ring-stone-200">
             <div className="space-y-2">
-              {PAY_METHODS.map((m) => (
+              {SPLIT_METHODS.map((m) => (
                 <div key={m} className="flex items-center gap-2">
                   <span className="w-12 text-sm font-bold text-stone-700">{payLabel(m)}</span>
                   <div className="relative min-w-0 flex-1">
@@ -2059,6 +2059,22 @@ function PaymentModal({
             >
               <span className="text-xl">➗</span>
               <span className="text-lg font-bold">Hybrid</span>
+            </button>
+            <button
+              disabled={busy || blocked}
+              onClick={() => pay("swiggy")}
+              className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#fc8019] text-white transition hover:brightness-95 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-lg font-bold">Swiggy</span>
+              <span className="text-[11px] font-semibold opacity-90">Paid on the app</span>
+            </button>
+            <button
+              disabled={busy || blocked}
+              onClick={() => pay("zomato")}
+              className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-2xl bg-[#e23744] text-white transition hover:brightness-95 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="text-lg font-bold">Zomato</span>
+              <span className="text-[11px] font-semibold opacity-90">Paid on the app</span>
             </button>
           </div>
         )}

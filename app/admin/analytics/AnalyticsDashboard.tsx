@@ -8,7 +8,7 @@ import AnalyticsFilters from "./AnalyticsFilters";
 import { Columns, Heatmap, MenuMatrix } from "./charts";
 import { BarList, C, Empty, inrCompact, minutes, QUADRANTS, SplitBar } from "./parts";
 import RefreshButton from "./RefreshButton";
-import { payLabel } from "@/lib/payments";
+import { payLabel, SPLIT_METHODS, type SplitMethod } from "@/lib/payments";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const hour12 = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? "am" : "pm"}`;
@@ -128,10 +128,11 @@ export default function AnalyticsDashboard({
               <div className="grid gap-3">
                 <Card title="How guests paid">
                   <SplitBar
-                    parts={a.payments.map((p) => ({
+                    // Swiggy / Zomato only show once the café has used them.
+                    parts={a.payments.filter((p) => p.amount > 0 || SPLIT_METHODS.includes(p.method as SplitMethod)).map((p) => ({
                       label: payLabel(p.method),
                       value: p.amount,
-                      color: { upi: C.series, cash: C.second, card: C.third }[p.method],
+                      color: { upi: C.series, cash: C.second, card: C.third, swiggy: "#fc8019", zomato: "#8f2a33" }[p.method],
                       detail: `${inrCompact(p.amount)} · ${p.bills} bills`,
                     }))}
                   />

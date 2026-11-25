@@ -39,7 +39,7 @@ export const TIMES_OF_DAY: { key: TimeOfDay; label: string; from: number; to: nu
 
 export function parseFilters(q: { pay?: string | string[]; table?: string | string[]; time?: string | string[] }): Filters {
   return {
-    pay: q.pay === "upi" || q.pay === "cash" || q.pay === "card" || q.pay === "hybrid" ? q.pay : null,
+    pay: typeof q.pay === "string" && ((PAY_METHODS as string[]).includes(q.pay) || q.pay === "hybrid") ? (q.pay as PayMethod | "hybrid") : null,
     table: typeof q.table === "string" && q.table ? q.table : null,
     time: TIMES_OF_DAY.some((t) => t.key === q.time) ? (q.time as TimeOfDay) : null,
   };
