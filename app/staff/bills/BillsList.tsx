@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import StaffNav from "@/components/StaffNav";
+import BillTo from "@/components/BillTo";
 import WhatsAppBill from "@/components/WhatsAppBill";
 import { formatINR } from "@/lib/money";
 import { paidBy, payLabel, type PayMethod } from "@/lib/payments";
@@ -18,6 +19,8 @@ type BillRow = {
   tables: { name: string } | null;
   payments: { method: PayMethod; amount_paise: number }[];
   order_guests?: { name: string; phone: string }[];
+  bill_to_name?: string | null;
+  bill_to_tax_id?: string | null;
 };
 
 function todayISO() {
@@ -162,7 +165,13 @@ export default function BillsList() {
                     </button>
                   </div>
                   {sharing === r.id && (
-                    <div className="w-full sm:pl-0">
+                    <div className="w-full space-y-2 sm:pl-0">
+                      <BillTo
+                        orderId={r.id}
+                        name={r.bill_to_name}
+                        taxId={r.bill_to_tax_id}
+                        onSaved={(v) => setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, bill_to_name: v.name, bill_to_tax_id: v.taxId } : x)))}
+                      />
                       <WhatsAppBill orderId={r.id} total={r.total_paise} guests={r.order_guests ?? []} />
                     </div>
                   )}

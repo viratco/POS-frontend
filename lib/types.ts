@@ -40,6 +40,9 @@ export type Order = {
   gst_rate_bps?: number | null;
   gst_paise?: number | null;
   total_paise?: number | null;
+  /** "Bill to" company name and tax / VAT / GST number, printed on the invoice. */
+  bill_to_name?: string | null;
+  bill_to_tax_id?: string | null;
 };
 export type OrderItem = {
   id: string;

@@ -22,4 +22,17 @@ export function billMessage(o: { cafeName: string; guestName?: string | null; to
   ].join("\n");
 }
 
-export const whatsappUrl = (phone: string, text: string) => `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`;
+/**
+ * The number for wa.me, with country code: an Indian mobile ("98765 43210" -> "919876543210"),
+ * or a foreign one typed with + or 00 ("+39 345 066 5603", "0039…" -> "393450665603"). Null if neither.
+ */
+export function waNumber(input: string): string | null {
+  const india = indianMobile(input);
+  if (india) return `91${india}`;
+  const t = input.trim();
+  if (!/^(\+|00)/.test(t)) return null;
+  const d = t.replace(/\D/g, "").replace(/^00/, "");
+  return /^[1-9]\d{7,14}$/.test(d) ? d : null;
+}
+
+export const whatsappUrl = (number: string, text: string) => `https://wa.me/${number}?text=${encodeURIComponent(text)}`;

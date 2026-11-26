@@ -25,6 +25,8 @@ export type PublicBill = {
     gst_rate_bps: number;
     gst_paise: number;
     total_paise: number;
+    bill_to_name?: string | null;
+    bill_to_tax_id?: string | null;
   };
   items: { name: string; qty: number; price_paise: number; options: { name: string }[] | null }[];
   payments: { method: string; amount_paise: number }[];

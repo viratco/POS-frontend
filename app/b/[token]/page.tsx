@@ -73,6 +73,12 @@ async function Bill({ params }: { params: Promise<{ token: string }> }) {
               <span>{when}</span>
               {order.table && <span>{order.table}</span>}
             </div>
+            {(order.bill_to_name || order.bill_to_tax_id) && (
+              <div className="mt-2 border-t border-stone-200 pt-2 text-stone-700">
+                <span className="font-semibold">Bill to:</span> {order.bill_to_name}
+                {order.bill_to_tax_id && <span className="block text-stone-500">Tax / VAT No: {order.bill_to_tax_id}</span>}
+              </div>
+            )}
           </div>
 
           <ul className="mt-4 divide-y divide-stone-100">

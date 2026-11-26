@@ -3,6 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DietMark } from "@/components/MenuMarks";
+import BillTo from "@/components/BillTo";
 import WhatsAppBill from "@/components/WhatsAppBill";
 import OfflineBar from "@/components/OfflineBar";
 import PrintSheet, { type PrintJob } from "@/components/PrintSheet";
@@ -1201,6 +1202,7 @@ function TableDrawer({
               onSave={onSaveGuest}
               onRemove={onRemoveGuest}
             />
+            {order && <BillTo orderId={order.id} name={order.bill_to_name} taxId={order.bill_to_tax_id} disabled={!canEditGuests} />}
           </div>
           <button onClick={onClose} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-xl text-stone-400 hover:bg-stone-100 hover:text-stone-700">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">

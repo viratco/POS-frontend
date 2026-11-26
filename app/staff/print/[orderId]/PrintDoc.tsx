@@ -166,6 +166,14 @@ export function Bill({ data, kind, printedAt }: { data: Loaded; kind: "bill" | "
       {isInvoice && order.invoice_no && <Line left="Invoice No" right={order.invoice_no} />}
       <Line left="Date" right={when(isInvoice && order.closed_at ? order.closed_at : printedAt || order.created_at)} />
       <Line left="Table" right={order.tables?.name ?? "—"} />
+      {(order.bill_to_name || order.bill_to_tax_id) && (
+        <>
+          <Hr />
+          <div className="font-bold">Bill to</div>
+          {order.bill_to_name && <div>{order.bill_to_name}</div>}
+          {order.bill_to_tax_id && <div>Tax / VAT No: {order.bill_to_tax_id}</div>}
+        </>
+      )}
 
       <Hr />
       <div className="flex font-bold">
