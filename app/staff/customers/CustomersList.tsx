@@ -5,6 +5,7 @@ import StaffNav from "@/components/StaffNav";
 import { formatINR } from "@/lib/money";
 import { optionsLabel } from "@/lib/options";
 import { payLabel, type PayMethod } from "@/lib/payments";
+import { showPhone, telHref } from "@/lib/phone";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 import type { OrderStatus, PickedOption } from "@/lib/types";
 
@@ -48,10 +49,6 @@ type Sort = "recent" | "visits" | "spent";
 
 const PAGE = 1000; // the database hands out at most this many rows per request
 
-// "9876543210" -> "98765 43210"
-function formatPhone(p: string) {
-  return p.length === 10 ? `${p.slice(0, 5)} ${p.slice(5)}` : p;
-}
 
 function ago(iso: string) {
   // Calendar days, not 24-hour periods: 8 PM last night is "yesterday" even at 9 AM.
@@ -226,8 +223,8 @@ export default function CustomersList() {
                       {c.consent && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">OK to send offers</span>}
                     </div>
                     <div className="text-sm text-stone-500">
-                      <a href={`tel:+91${c.phone}`} className="font-medium text-emerald-700 tabular-nums hover:underline">
-                        {formatPhone(c.phone)}
+                      <a href={telHref(c.phone)} className="font-medium text-emerald-700 tabular-nums hover:underline">
+                        {showPhone(c.phone)}
                       </a>
                       <span className="tabular-nums">
                         {" "}
@@ -309,8 +306,8 @@ function BillsDrawer({ customer, onClose }: { customer: Customer; onClose: () =>
         <div className="flex items-start justify-between gap-3 border-b border-stone-200 bg-white px-5 pt-5 pb-4">
           <div className="min-w-0">
             <h2 className="truncate text-2xl font-bold tracking-tight">{customer.name}</h2>
-            <a href={`tel:+91${customer.phone}`} className="text-sm font-semibold text-emerald-700 tabular-nums hover:underline">
-              📞 {formatPhone(customer.phone)}
+            <a href={telHref(customer.phone)} className="text-sm font-semibold text-emerald-700 tabular-nums hover:underline">
+              📞 {showPhone(customer.phone)}
             </a>
             <p className="mt-1 text-sm text-stone-500">
               {customer.visits} visit{customer.visits === 1 ? "" : "s"} · {formatINR(customer.spent)} in total · last visit {ago(customer.last)}

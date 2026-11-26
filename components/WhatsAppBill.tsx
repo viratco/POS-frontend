@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { billMessage, indianMobile, waNumber, whatsappUrl } from "@/lib/billWhatsApp";
+import { billMessage, waNumber, whatsappUrl } from "@/lib/billWhatsApp";
 import { useCafe } from "@/lib/cafe";
 import { supabaseBrowser } from "@/lib/supabase/browser";
 
@@ -15,7 +15,7 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
   const [error, setError] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [sentTo, setSentTo] = useState<string[]>([]);
-  const people = guests.filter((g, i) => indianMobile(g.phone) && guests.findIndex((x) => x.phone === g.phone) === i);
+  const people = guests.filter((g, i) => waNumber(g.phone) && guests.findIndex((x) => x.phone === g.phone) === i);
 
   // Ask for the link straight away, so the tap can open WhatsApp at once (browsers block
   // windows opened after a wait).
@@ -37,7 +37,7 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
   async function send(phone: string, name: string | null) {
     const mobile = waNumber(phone);
     if (!mobile) {
-      setError("Enter a 10-digit mobile number, or a foreign one starting with + and the country code.");
+      setError("Enter a 10-digit mobile number. For a number from another country, start with + and the country code.");
       return;
     }
     const text = (t: string) => message(t, name);
@@ -92,7 +92,7 @@ export default function WhatsAppBill({ orderId, total, guests }: { orderId: stri
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             inputMode="tel"
-            placeholder={people.length ? "Another number (+39… for abroad)" : "Guest's mobile (+39… for abroad)"}
+            placeholder={people.length ? "Another number" : "Guest's mobile number"}
             className="h-11 min-w-0 flex-1 rounded-lg bg-white px-3 text-sm ring-1 ring-emerald-200 outline-none focus:ring-2 focus:ring-emerald-600"
           />
           <button className="h-11 rounded-lg bg-stone-900 px-4 text-sm font-bold text-white">Send</button>

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { MezanaEmblem, MezanaWordmark } from "@/components/Mezana";
+import CountryCode from "@/components/CountryCode";
 import { DietMark } from "@/components/MenuMarks";
 import { formatINR } from "@/lib/money";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
+import { fullPhone } from "@/lib/phone";
 import { isRoom } from "@/lib/rooms";
 import type { Category, MenuItem, OptionGroup, PickedOption } from "@/lib/types";
 import { placeOrder, type GuestDetails, type PlacedItem } from "./actions";
@@ -28,13 +30,6 @@ export type Brand = { name: string; slug: string; logoUrl: string | null };
 const INK = "text-[color:var(--t-1a202c)]";
 const GUEST_KEY = "sohees.guest";
 
-// "+91 98765 43210" / "098765 43210" -> "9876543210"
-function normalisePhone(input: string) {
-  let d = input.replace(/\D/g, "");
-  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
-  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
-  return d;
-}
 const GREY = "text-[color:var(--t-718096)]";
 
 export default function MenuClient({
@@ -63,17 +58,21 @@ export default function MenuClient({
   const [customizing, setCustomizing] = useState<MenuItem | null>(null);
   // Guest details, asked once and remembered on this phone.
   const [guest, setGuest] = useState<GuestDetails>({ name: "", phone: "", marketing_consent: false });
+  const [cc, setCc] = useState("91"); // country code of the guest's mobile
   const [showGuestErrors, setShowGuestErrors] = useState(false);
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(GUEST_KEY) ?? "null");
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved?.name && saved?.phone) setGuest({ name: saved.name, phone: saved.phone, marketing_consent: !!saved.marketing_consent });
+      if (saved?.name && saved?.phone) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setGuest({ name: saved.name, phone: saved.local ?? saved.phone, marketing_consent: !!saved.marketing_consent });
+        if (typeof saved.cc === "string") setCc(saved.cc);
+      }
     } catch {}
   }, []);
-  const guestPhone = normalisePhone(guest.phone);
+  const guestPhone = fullPhone(cc, guest.phone);
   const guestNameOk = guest.name.trim().length > 0;
-  const guestPhoneOk = /^[6-9]\d{9}$/.test(guestPhone);
+  const guestPhoneOk = guestPhone !== null;
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -169,7 +168,7 @@ export default function MenuClient({
       setShowGuestErrors(true);
       return;
     }
-    const details: GuestDetails = { name: guest.name.trim(), phone: guestPhone, marketing_consent: guest.marketing_consent };
+    const details: GuestDetails = { name: guest.name.trim(), phone: guestPhone ?? "", marketing_consent: guest.marketing_consent };
     startTransition(async () => {
       const res = await placeOrder(
         token,
@@ -186,7 +185,7 @@ export default function MenuClient({
         return;
       }
       try {
-        localStorage.setItem(GUEST_KEY, JSON.stringify(details));
+        localStorage.setItem(GUEST_KEY, JSON.stringify({ ...details, cc, local: guest.phone }));
       } catch {}
       setPlaced(res.items);
       setCounterAway(!!res.counterAway);
@@ -397,21 +396,21 @@ export default function MenuClient({
                   showGuestErrors && !guestPhoneOk ? "border-red-400" : "border-[color:var(--t-e2e8f0)]"
                 }`}
               >
-                <span className={`pl-3 pr-1 text-[16px] ${GREY}`}>+91</span>
+                <CountryCode value={cc} onChange={setCc} className={`text-[16px] ${GREY}`} />
                 <input
                   value={guest.phone}
                   onChange={(e) => setGuest({ ...guest, phone: e.target.value.replace(/[^\d+\s-]/g, "").slice(0, 16) })}
                   type="tel"
                   inputMode="numeric"
                   autoComplete="tel-national"
-                  placeholder="10-digit mobile"
+                  placeholder={cc === "91" ? "10-digit mobile" : "Mobile number"}
                   className="h-full w-full bg-transparent pr-3 text-[16px] tracking-wide outline-none"
                 />
               </div>
             </label>
             {showGuestErrors && (!guestNameOk || !guestPhoneOk) && (
               <p className="mt-2 text-sm text-red-600">
-                {!guestNameOk ? "Please enter your name." : "Please enter a valid 10-digit mobile number."}
+                {!guestNameOk ? "Please enter your name." : cc === "91" ? "Please enter a valid 10-digit mobile number." : "Please enter a valid mobile number."}
               </p>
             )}
             <label className="mt-3 flex items-start gap-2.5 text-sm">

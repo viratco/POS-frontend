@@ -20,7 +20,7 @@ const MESSAGES: Record<string, string> = {
   item_unavailable: "Something in your cart just sold out. Please review your cart.",
   invalid_cart: "Your cart is empty or too large.",
   invalid_options: "One of your dishes needs its options chosen again. Please check your cart.",
-  invalid_phone: "Please enter a valid 10-digit mobile number.",
+  invalid_phone: "Please enter a valid mobile number.",
   invalid_name: "Please enter your name.",
   slow_down: "Lots of orders from this table just now. Please wait a minute, or ask a staff member.",
 };

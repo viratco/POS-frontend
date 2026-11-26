@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DietMark } from "@/components/MenuMarks";
 import BillTo from "@/components/BillTo";
+import CountryCode from "@/components/CountryCode";
 import WhatsAppBill from "@/components/WhatsAppBill";
 import OfflineBar from "@/components/OfflineBar";
 import PrintSheet, { type PrintJob } from "@/components/PrintSheet";
@@ -24,6 +25,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser";
 import { defaultPicks, extraPrice, lineKey, missingGroup, optionsLabel } from "@/lib/options";
 import type { Category, Guest, MenuItem, OptionGroup, Order, OrderItem, PickedOption, Table } from "@/lib/types";
 import { useOrderFeed } from "@/lib/useOrderFeed";
+import { fullPhone, showPhone, telHref } from "@/lib/phone";
 import CafeFloorPlan from "@/components/CafeFloorPlan";
 import { isRoom } from "@/lib/rooms";
 import { acceptOrder, staffAddItems } from "./actions";
@@ -59,7 +61,7 @@ function friendlyError(msg: string) {
   if (msg.includes("invalid_split")) return "Those payment amounts aren't valid. Please check them.";
   if (msg.includes("invalid input value for enum") || msg.includes("p_splits")) return "Card and Hybrid need a one-time database update first.";
   if (msg.includes("invalid_name")) return "Please enter the guest's name.";
-  if (msg.includes("invalid_phone")) return "Please enter a valid 10-digit mobile number.";
+  if (msg.includes("invalid_phone")) return "Please enter a valid mobile number.";
   if (msg.includes("staff_save_guest") || msg.includes("staff_remove_guest")) return "Adding guest details needs a one-time database update first.";
   if (msg.includes("permission denied")) return "You don't have permission to do that.";
   return msg;
@@ -2369,20 +2371,9 @@ function WhatsAppToggle({ on, onToggle }: { on: boolean; onToggle: () => void })
   );
 }
 
-// "9876543210" -> "98765 43210"
-function formatPhone(p: string) {
-  return p.length === 10 ? `${p.slice(0, 5)} ${p.slice(5)}` : p;
-}
 
 type NewGuest = { name: string; phone: string; marketing_consent: boolean };
 
-// "+91 98765-43210", "098765 43210" → "9876543210" (the same cleanup the database does).
-function cleanPhone(raw: string) {
-  const d = raw.replace(/\D/g, "");
-  if (d.length === 12 && d.startsWith("91")) return d.slice(2);
-  if (d.length === 11 && d.startsWith("0")) return d.slice(1);
-  return d;
-}
 
 // The guests on a bill: filled in by the QR menu, or typed in here by staff for guests
 // who ordered at the counter, so they show up in Customers too.
@@ -2404,17 +2395,19 @@ function GuestDetails({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [cc, setCc] = useState("91");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const digits = cleanPhone(phone);
-  const phoneOk = /^[6-9]\d{9}$/.test(digits);
+  const full = fullPhone(cc, phone);
+  const phoneOk = full !== null;
   const canSave = ready && !busy && name.trim().length > 0 && phoneOk;
 
   function close() {
     setOpen(false);
     setName("");
     setPhone("");
+    setCc("91");
     setConsent(false);
     setError(null);
   }
@@ -2424,14 +2417,14 @@ function GuestDetails({
     if (!canSave) return;
     setBusy(true);
     setError(null);
-    const r = await onSave({ name: name.trim(), phone: digits, marketing_consent: consent });
+    const r = await onSave({ name: name.trim(), phone: full ?? "", marketing_consent: consent });
     setBusy(false);
     if (r.error) setError(friendlyError(r.error));
     else close();
   }
 
   async function remove(g: Guest) {
-    if (!confirm(`Remove ${g.name} (${formatPhone(g.phone)}) from this bill?`)) return;
+    if (!confirm(`Remove ${g.name} (${showPhone(g.phone)}) from this bill?`)) return;
     setBusy(true);
     setError(null);
     const r = await onRemove(g.phone);
@@ -2447,8 +2440,8 @@ function GuestDetails({
           {guests.map((g) => (
             <li key={g.phone} className="flex flex-wrap items-center gap-x-2 text-sm">
               <span className="font-semibold text-stone-800">👤 {g.name}</span>
-              <a href={`tel:+91${g.phone}`} className="font-medium text-emerald-700 tabular-nums hover:underline">
-                {formatPhone(g.phone)}
+              <a href={telHref(g.phone)} className="font-medium text-emerald-700 tabular-nums hover:underline">
+                {showPhone(g.phone)}
               </a>
               {g.marketing_consent && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">OK to send offers</span>}
               {editable && ready && (
@@ -2493,17 +2486,19 @@ function GuestDetails({
             className="h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-[15px] outline-none focus:border-stone-500"
           />
           <div className="flex h-11 items-center rounded-lg border border-stone-300 bg-white focus-within:border-stone-500">
-            <span className="pl-3 text-[15px] text-stone-500">+91</span>
+            <CountryCode value={cc} onChange={setCc} className="text-[15px] text-stone-500" />
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="10-digit mobile number"
+              placeholder={cc === "91" ? "10-digit mobile number" : "Mobile number"}
               inputMode="tel"
               autoComplete="off"
               className="h-full min-w-0 flex-1 bg-transparent px-2 text-[15px] tabular-nums outline-none"
             />
           </div>
-          {phone.length > 0 && !phoneOk && digits.length >= 10 && <p className="text-xs text-red-600">That doesn&apos;t look like a 10-digit mobile number.</p>}
+          {phone.length > 0 && !phoneOk && phone.replace(/\D/g, "").length >= 10 && (
+            <p className="text-xs text-red-600">That doesn&apos;t look like a valid mobile number.</p>
+          )}
           <label className="flex items-center gap-2 text-sm text-stone-700">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="h-4 w-4 accent-emerald-700" />
             Guest is OK to receive offers on WhatsApp
@@ -2530,8 +2525,8 @@ function GuestLine({ guests, className = "" }: { guests: Guest[]; className?: st
       {guests.map((g) => (
         <span key={g.phone} className="text-stone-600">
           👤 <span className="font-semibold text-stone-800">{g.name}</span>{" "}
-          <a href={`tel:+91${g.phone}`} className="tabular-nums text-emerald-700 hover:underline">
-            {formatPhone(g.phone)}
+          <a href={telHref(g.phone)} className="tabular-nums text-emerald-700 hover:underline">
+            {showPhone(g.phone)}
           </a>
         </span>
       ))}
