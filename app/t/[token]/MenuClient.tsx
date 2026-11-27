@@ -396,7 +396,7 @@ export default function MenuClient({
                   showGuestErrors && !guestPhoneOk ? "border-red-400" : "border-[color:var(--t-e2e8f0)]"
                 }`}
               >
-                <CountryCode value={cc} onChange={setCc} className={`text-[16px] ${GREY}`} />
+                <CountryCode value={cc} onChange={setCc} className={`text-[16px] ${INK}`} />
                 <input
                   value={guest.phone}
                   onChange={(e) => setGuest({ ...guest, phone: e.target.value.replace(/[^\d+\s-]/g, "").slice(0, 16) })}

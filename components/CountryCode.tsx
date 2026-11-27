@@ -1,13 +1,14 @@
 "use client";
 
-import { COUNTRY_CODES } from "@/lib/phone";
+import { COUNTRY_CODES, flag } from "@/lib/phone";
 
-// "+91 ▾" at the start of a phone field; tapping it opens the country list.
+// "🇮🇳 +91 ▾" at the start of a phone field; tapping it opens the country list.
 export default function CountryCode({ value, onChange, className = "" }: { value: string; onChange: (code: string) => void; className?: string }) {
+  const current = COUNTRY_CODES.find((c) => c.code === value);
   return (
-    <span className={`relative flex h-full shrink-0 items-center gap-0.5 pl-3 pr-1 ${className}`}>
-      +{value}
-      <svg viewBox="0 0 12 12" className="h-2.5 w-2.5 opacity-60" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
+    <span className={`relative mr-2 flex h-full shrink-0 items-center gap-1 border-r border-current/20 pr-2 pl-3 font-semibold ${className}`}>
+      {current && <span aria-hidden>{flag(current.iso)}</span>}+{value}
+      <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.8} aria-hidden>
         <path d="M2.5 4.5L6 8l3.5-3.5" />
       </svg>
       <select
@@ -17,8 +18,8 @@ export default function CountryCode({ value, onChange, className = "" }: { value
         className="absolute inset-0 cursor-pointer opacity-0"
       >
         {COUNTRY_CODES.map((c) => (
-          <option key={c.code + c.country} value={c.code}>
-            +{c.code} {c.country}
+          <option key={c.iso} value={c.code}>
+            {flag(c.iso)} {c.country} (+{c.code})
           </option>
         ))}
       </select>

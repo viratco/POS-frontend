@@ -2486,7 +2486,7 @@ function GuestDetails({
             className="h-11 w-full rounded-lg border border-stone-300 bg-white px-3 text-[15px] outline-none focus:border-stone-500"
           />
           <div className="flex h-11 items-center rounded-lg border border-stone-300 bg-white focus-within:border-stone-500">
-            <CountryCode value={cc} onChange={setCc} className="text-[15px] text-stone-500" />
+            <CountryCode value={cc} onChange={setCc} className="text-[15px] text-stone-800" />
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
